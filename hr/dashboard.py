@@ -75,7 +75,9 @@ LAYOUT = dict(
 
 @st.cache_data
 def load_data():
-    return pd.read_csv("data/predictions.csv")
+    import os
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    return pd.read_csv(os.path.join(BASE_DIR, "data", "predictions.csv"))
 
 df = load_data()
 
