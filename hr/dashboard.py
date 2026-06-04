@@ -81,7 +81,8 @@ def load_data():
 
 df = load_data()
 
-logo_path = Path("assets/logo.png")
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+logo_path = Path(os.path.join(BASE_DIR, "assets", "logo.png"))
 if logo_path.exists():
     st.sidebar.image(str(logo_path), use_container_width=True)
 st.sidebar.markdown("---")
