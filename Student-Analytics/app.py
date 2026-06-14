@@ -1058,14 +1058,10 @@ def sidebar():
         user = st.session_state.get("user", {})
         st.markdown(f"""
         <div style="border-top:1px solid {BORDER};padding-top:16px;font-size:11px;color:{MUTED};">
-            Signed in as<br>
             <span style="color:{TEXT};font-weight:600;">{user.get('username','—')}</span>
             <span style="color:{BLUE};"> · {user.get('role','')}</span>
         </div>
         """, unsafe_allow_html=True)
-        if st.button("Sign Out", key="signout"):
-            del st.session_state["user"]
-            st.rerun()
 
     return st.session_state.get("page", "overview")
 
@@ -1073,8 +1069,7 @@ def sidebar():
 # ── Main ─────────────────────────────────────────────────────────────────────
 def main():
     if "user" not in st.session_state:
-        login_page()
-        return
+        st.session_state["user"] = {"username": "guest", "role": "viewer"}
 
     render_header()
     page = sidebar()
