@@ -158,6 +158,53 @@ def load(collection, query=None, projection=None):
     cursor = db[collection].find(query or {}, projection or {"_id": 0})
     return pd.DataFrame(list(cursor))
 
+# ── Filters (Group / Track) ───────────────────────────────────────────────────
+@st.cache_data(ttl=300)
+def get_group_track_map():
+    groups = load("group_summaries", projection={"_id": 0, "group_id": 1,
+                                                   "group_name": 1, "course_id": 1})
+    courses = load("courses", projection={"_id": 0, "course_id": 1, "course_name": 1})
+    if groups.empty:
+        return pd.DataFrame(columns=["group_id", "group_name", "course_id", "course_name"])
+    if not courses.empty and "course_id" in groups.columns:
+        groups = groups.merge(courses, on="course_id", how="left")
+    if "course_name" not in groups.columns:
+        groups["course_name"] = groups.get("course_id")
+    return groups
+
+def filter_sidebar():
+    gt_map = get_group_track_map()
+    with st.sidebar:
+        st.markdown(f'<div style="font-size:10px;color:{MUTED};letter-spacing:1.5px;'
+                    f'text-transform:uppercase;padding:16px 0 8px 4px;">Filters</div>',
+                    unsafe_allow_html=True)
+        track_options = sorted(gt_map["course_name"].dropna().unique().tolist()) if not gt_map.empty else []
+        selected_tracks = st.multiselect("Track", track_options, default=[], key="filter_tracks")
+
+        if selected_tracks and not gt_map.empty:
+            group_pool = gt_map[gt_map["course_name"].isin(selected_tracks)]
+        else:
+            group_pool = gt_map
+
+        group_options = sorted(group_pool["group_name"].dropna().unique().tolist()) if not group_pool.empty else []
+        selected_groups = st.multiselect("Group", group_options, default=[], key="filter_groups")
+
+    selected_gids = []
+    if not gt_map.empty:
+        pool = gt_map
+        if selected_tracks:
+            pool = pool[pool["course_name"].isin(selected_tracks)]
+        if selected_groups:
+            pool = pool[pool["group_name"].isin(selected_groups)]
+        if selected_tracks or selected_groups:
+            selected_gids = pool["group_id"].dropna().unique().tolist()
+    return selected_gids
+
+def apply_group_filter(df, gids):
+    if gids and not df.empty and "group_id" in df.columns:
+        return df[df["group_id"].isin(gids)]
+    return df
+
 # ── Auth ──────────────────────────────────────────────────────────────────────
 def hash_pw(pw):
     return hashlib.sha256(pw.encode()).hexdigest()
@@ -174,7 +221,7 @@ def login_page():
     col1, col2, col3 = st.columns([1, 1.2, 1])
     with col2:
         st.markdown("<br><br>", unsafe_allow_html=True)
-        logo_path = Path("logo.png")
+        logo_path = Path(__file__).parent / "logo.png"
         if logo_path.exists():
             with open(logo_path, "rb") as f:
                 b64 = base64.b64encode(f.read()).decode()
@@ -290,7 +337,7 @@ def kmeans_fit(X, k, n_init=10, max_iter=100, seed=42):
 
 # ── Header ────────────────────────────────────────────────────────────────────
 def render_header():
-    logo_path = Path("logo.png")
+    logo_path = Path(__file__).parent / "logo.png"
     logo_html = ""
     if logo_path.exists():
         with open(logo_path, "rb") as f:
@@ -428,6 +475,7 @@ def page_performance():
 def page_engagement():
     section("Q4 — ATTENDANCE RATE VS AVERAGE GRADE")
     sf = load("student_profiles")
+    sf = apply_group_filter(sf, st.session_state.get("selected_gids", []))
     if not sf.empty:
         corr = sf["attendance_rate"].corr(sf["avg_grade"])
         fig = px.scatter(
@@ -597,6 +645,7 @@ def page_concepts():
 def page_risk():
     section("Q14 — AT-RISK STUDENT RANKING")
     risk = load("at_risk_ranking")
+    risk = apply_group_filter(risk, st.session_state.get("selected_gids", []))
     if not risk.empty:
         top10 = risk.nlargest(10, "risk_score")
         risk_color = {
@@ -699,9 +748,12 @@ def page_risk():
 
 def page_segments():
     section("Q11 — STUDENT SEGMENTATION")
+    gids = st.session_state.get("selected_gids", [])
     clusters = load("cluster_assignments")
+    clusters = apply_group_filter(clusters, gids)
 
     sf11 = load("student_profiles")
+    sf11 = apply_group_filter(sf11, gids)
     if not sf11.empty:
         feats = ["avg_grade", "attendance_rate", "login_count", "total_watch_time", "failed_concepts"]
         feats = [f for f in feats if f in sf11.columns]
@@ -788,6 +840,7 @@ def page_segments():
 
     section("Q10 — AGE BANDS VS OUTCOMES")
     sf = load("student_profiles")
+    sf = apply_group_filter(sf, gids)
     if not sf.empty and "age" in sf.columns:
         sf["age_band"] = pd.cut(sf["age"], bins=[0, 20, 25, 30, 40, 100],
                                  labels=["≤20", "21–25", "26–30", "31–40", "41+"])
@@ -967,7 +1020,7 @@ def page_groups():
 # ── Sidebar nav ───────────────────────────────────────────────────────────────
 def sidebar():
     with st.sidebar:
-        logo_path = Path("logo.png")
+        logo_path = Path(__file__).parent / "logo.png"
         if logo_path.exists():
             with open(logo_path, "rb") as f:
                 b64 = base64.b64encode(f.read()).decode()
@@ -1025,6 +1078,7 @@ def main():
 
     render_header()
     page = sidebar()
+    st.session_state["selected_gids"] = filter_sidebar()
 
     dispatch = {
         "overview":    page_overview,
