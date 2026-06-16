@@ -369,8 +369,7 @@ def sidebar():
                 ">{label}</div>
             </div>
             """, unsafe_allow_html=True)
-            if st.button(label, key=f"nav_{key}", use_container_width=True,
-                         label_visibility="collapsed"):
+            if st.button(label, key=f"nav_{key}", use_container_width=True):
                 st.session_state["page"] = key
                 st.rerun()
 
