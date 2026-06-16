@@ -884,6 +884,54 @@ def page_segments():
         )
         st.plotly_chart(fig_donut, use_container_width=True)
 
+        # ── Bubble scatter: the actual cluster view (grade vs attendance) ──
+        section("Q11 — GRADE VS ATTENDANCE  (CLUSTER VIEW)")
+        plot_df = seg_df.copy()
+        plot_df["att_pct"] = plot_df["attendance_rate"] * 100
+        fig_scat = go.Figure()
+        for seg in seg_order:
+            sub = plot_df[plot_df["segment"] == seg]
+            if sub.empty:
+                continue
+            lc = sub["login_count"].clip(upper=sub["login_count"].quantile(0.95)) if len(sub) > 1 else sub["login_count"]
+            fig_scat.add_trace(go.Scatter(
+                x=sub["att_pct"], y=sub["avg_grade"],
+                mode="markers",
+                name=seg,
+                marker=dict(
+                    color=SEG_COLORS.get(seg, MUTED),
+                    size=lc, sizemode="area", sizeref=0.15,
+                    opacity=0.75,
+                    line=dict(width=0.5, color="rgba(255,255,255,0.3)"),
+                ),
+                text=sub["full_name"] if "full_name" in sub.columns else None,
+                hovertemplate=(
+                    "<b>%{text}</b><br>"
+                    "Attendance: %{x:.1f}%<br>"
+                    "Grade: %{y:.1f}<br>"
+                    f"Segment: {seg}<extra></extra>"
+                ),
+            ))
+        fig_scat.update_layout(
+            title=dict(text="Each dot = one student  ·  Bubble size = Login Count  ·  Color = Segment",
+                       font=dict(size=13, color=TEXT, family="Inter"), x=0, xanchor="left"),
+            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor=BG,
+            font=dict(color=TEXT, family="Inter", size=11),
+            legend=dict(bgcolor="rgba(0,0,0,0)", bordercolor=BORDER, font=dict(color=TEXT)),
+            margin=dict(t=50, b=40, l=40, r=20),
+            xaxis=dict(title="Attendance %", gridcolor=GRID, linecolor=BORDER, tickfont=dict(color=MUTED)),
+            yaxis=dict(title="Avg Grade",    gridcolor=GRID, linecolor=BORDER, tickfont=dict(color=MUTED)),
+            height=440,
+        )
+        st.plotly_chart(fig_scat, use_container_width=True)
+        insight(
+            "Each bubble is one student, colored by segment and sized by login count. "
+            "<strong>High Achievers</strong> sit top-right (high grade, high attendance); "
+            "<strong>At Risk</strong> students cluster bottom-left — these are the names on the Q14 contact list. "
+            "Blue/purple bubbles sitting further left than the green cluster but still scoring well are the "
+            "<strong>Self-Directed</strong> pattern showing up visually, not just in the averages table."
+        )
+
         # ── Per-segment insights ────────────────────────────────────────────
         section("SEGMENT INSIGHTS")
         FEATS       = ["avg_grade", "attendance_rate", "login_count", "failed_concepts"]
@@ -1120,6 +1168,50 @@ def page_groups():
                     "the merged group won't have knowledge gaps between cohorts. "
                     "Verify they share the same course track and instructor availability before confirming."
                 )
+
+                # ── Q13b — what actually drove that similarity score ─────────
+                # The bar/heatmap above are similarity numbers; this shows the
+                # underlying per-concept mastery scores (concept_pivot) that the
+                # cosine similarity was computed on, for the target vs its best match.
+                match_rows = groups.loc[groups["group_name"] == closest["group_name"], "group_id"]
+                match_gid  = match_rows.values[0] if len(match_rows) else None
+                match_vec  = group_profile(match_gid) if match_gid is not None else None
+
+                if target_vec is not None and match_vec is not None:
+                    concept_compare = pd.DataFrame({
+                        target_name:           target_vec,
+                        closest["group_name"]: match_vec,
+                    }).fillna(0)
+                    concept_compare["abs_diff"] = (
+                        concept_compare[target_name] - concept_compare[closest["group_name"]]
+                    ).abs()
+
+                    active = concept_compare[
+                        (concept_compare[target_name] > 0) | (concept_compare[closest["group_name"]] > 0)
+                    ]
+                    top_concepts = active.sort_values("abs_diff", ascending=False).head(12).sort_values(target_name)
+
+                    if not top_concepts.empty:
+                        section(f"Q13 — CONCEPT MASTERY PROFILE  (actual similarity basis, cos={closest['similarity']:.4f})")
+                        fig_concepts = go.Figure()
+                        fig_concepts.add_trace(go.Bar(
+                            y=top_concepts.index, x=top_concepts[target_name],
+                            name=target_name, orientation="h", marker_color=BLUE,
+                        ))
+                        fig_concepts.add_trace(go.Bar(
+                            y=top_concepts.index, x=top_concepts[closest["group_name"]],
+                            name=closest["group_name"], orientation="h", marker_color=GREEN,
+                        ))
+                        fig_concepts.update_layout(barmode="group")
+                        apply_theme(fig_concepts, "", "Mean score_pct", "", 420)
+                        fig_concepts.update_layout(margin=dict(t=50, b=40, l=190, r=20))
+                        st.plotly_chart(fig_concepts, use_container_width=True)
+                        insight(
+                            f"The {closest['similarity']:.4f} similarity score was computed on per-concept mastery scores, "
+                            "not the operational metrics above — this chart shows the concepts that actually drove the match. "
+                            "Where the bars are close, both groups learned that concept at the same pace; "
+                            "the widest gaps flag exactly what the merged group's catch-up plan needs to cover first."
+                        )
 
 
 # ── Main ─────────────────────────────────────────────────────────────────────
