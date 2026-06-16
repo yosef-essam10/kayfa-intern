@@ -5,10 +5,10 @@ import numpy as np
 import plotly.graph_objects as go
 import plotly.express as px
 from plotly.subplots import make_subplots
-import hashlib, base64, os
+import hashlib, base64
 from pathlib import Path
 
-# ── Page config ──────────────────────────────────────────────────────────────
+# ── Page config ───────────────────────────────────────────────────────────────
 st.set_page_config(
     page_title="Kayfa Student Analytics",
     page_icon="📊",
@@ -16,7 +16,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# ── Theme tokens ─────────────────────────────────────────────────────────────
+# ── Theme tokens ──────────────────────────────────────────────────────────────
 BG      = "#0D0F2B"
 PANEL   = "#141736"
 BORDER  = "#1E2250"
@@ -28,8 +28,39 @@ YELLOW  = "#FFB700"
 TEXT    = "#E8EAFF"
 MUTED   = "#6B7280"
 GRID    = "#1E2250"
+ORANGE  = "#FF8C42"
 
-# ── CSS ──────────────────────────────────────────────────────────────────────
+SEG_COLORS = {
+    "High Achiever":      GREEN,
+    "At Risk":            RED,
+    "Self-Directed":      BLUE,
+    "Struggling Engaged": ORANGE,
+    "Average":            PURPLE,
+    "Disengaged":         MUTED,
+}
+
+INSIGHT_MAP = {
+    "High Achiever":
+        "High grades <strong>and</strong> high attendance <strong>and</strong> active logins — "
+        "the star students. Keep them challenged with advanced material.",
+    "At Risk":
+        "Low grades <strong>and</strong> low attendance — need <strong>immediate instructor contact</strong>. "
+        "Every week of delay reduces recovery probability.",
+    "Self-Directed":
+        "Good grades despite <strong>below-average attendance</strong> — independent learners who study "
+        "on their own. Low-touch, but worth a check-in to confirm they're not falling through the cracks.",
+    "Struggling Engaged":
+        "High login count but grades are <strong>below average</strong> — effort without results. "
+        "These students need targeted academic support, not just motivation.",
+    "Average":
+        "Middle-of-the-road across all metrics — stable but with clear room to grow. "
+        "A single structured nudge (study plan, peer group) can move them up.",
+    "Disengaged":
+        "Low logins and low engagement — students who have <strong>mentally checked out</strong>. "
+        "Outreach before the next term is critical.",
+}
+
+# ── CSS ───────────────────────────────────────────────────────────────────────
 st.markdown(f"""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
@@ -41,14 +72,12 @@ html, body, [class*="css"] {{
 }}
 .stApp {{ background-color: {BG}; }}
 
-/* Sidebar */
 section[data-testid="stSidebar"] {{
     background-color: {PANEL};
     border-right: 1px solid {BORDER};
 }}
 section[data-testid="stSidebar"] * {{ color: {TEXT} !important; }}
 
-/* Header bar */
 .top-bar {{
     display: flex;
     align-items: center;
@@ -63,13 +92,10 @@ section[data-testid="stSidebar"] * {{ color: {TEXT} !important; }}
     font-size: 10px; font-weight: 600; letter-spacing: 2px;
     color: {MUTED}; text-transform: uppercase;
 }}
-.top-bar-title {{
-    font-size: 22px; font-weight: 700; color: {TEXT};
-}}
-.top-bar-sub {{ font-size: 13px; color: {BLUE}; font-weight: 500; }}
+.top-bar-title {{ font-size: 22px; font-weight: 700; color: {TEXT}; }}
+.top-bar-sub   {{ font-size: 13px; color: {BLUE}; font-weight: 500; }}
 .top-bar-logo img {{ height: 44px; }}
 
-/* KPI cards */
 .kpi-row {{ display: flex; gap: 16px; margin-bottom: 28px; flex-wrap: wrap; }}
 .kpi-card {{
     flex: 1; min-width: 140px;
@@ -86,8 +112,8 @@ section[data-testid="stSidebar"] * {{ color: {TEXT} !important; }}
 .kpi-green  {{ color: {GREEN}; }}
 .kpi-red    {{ color: {RED}; }}
 .kpi-yellow {{ color: {YELLOW}; }}
+.kpi-purple {{ color: {PURPLE}; }}
 
-/* Section title */
 .section-title {{
     font-size: 13px; font-weight: 600; letter-spacing: 1.5px;
     text-transform: uppercase; color: {MUTED};
@@ -95,16 +121,14 @@ section[data-testid="stSidebar"] * {{ color: {TEXT} !important; }}
     margin: 28px 0 16px 0;
 }}
 
-/* Insight box */
 .insight-box {{
     background: linear-gradient(135deg, rgba(75,123,255,0.08), rgba(123,94,255,0.08));
     border: 1px solid rgba(75,123,255,0.25);
     border-radius: 10px; padding: 14px 18px; margin-top: 10px;
-    font-size: 13px; line-height: 1.7; color: {TEXT};
+    font-size: 13px; line-height: 1.8; color: {TEXT};
 }}
 .insight-box strong {{ color: {BLUE}; }}
 
-/* Risk badges */
 .badge-high   {{ background: rgba(255,75,110,0.15); color: {RED};
                  border: 1px solid {RED}; border-radius: 6px;
                  padding: 2px 10px; font-size: 11px; font-weight: 600; }}
@@ -115,20 +139,6 @@ section[data-testid="stSidebar"] * {{ color: {TEXT} !important; }}
                  border: 1px solid {GREEN}; border-radius: 6px;
                  padding: 2px 10px; font-size: 11px; font-weight: 600; }}
 
-/* Login card */
-.login-wrap {{
-    display: flex; justify-content: center; align-items: center;
-    min-height: 80vh;
-}}
-.login-card {{
-    background: {PANEL}; border: 1px solid {BORDER};
-    border-radius: 16px; padding: 48px 40px; width: 360px; text-align: center;
-}}
-
-/* Plotly override */
-.js-plotly-plot .plotly {{ background: transparent !important; }}
-
-/* Selectbox / inputs */
 div[data-baseweb="select"] > div {{
     background-color: {PANEL} !important;
     border-color: {BORDER} !important;
@@ -142,10 +152,28 @@ div[data-baseweb="select"] > div {{
     color: white; border: none; border-radius: 8px;
     padding: 10px 28px; font-weight: 600; width: 100%;
 }}
+
+/* Active nav button highlight */
+div[data-testid="stSidebar"] .stButton > button[aria-pressed="true"],
+div[data-testid="stSidebar"] .stButton > button:focus {{
+    background: rgba(75,123,255,0.2) !important;
+    border: 1px solid {BLUE} !important;
+    color: {TEXT} !important;
+}}
+div[data-testid="stSidebar"] .stButton > button {{
+    background: transparent !important;
+    border: 1px solid transparent !important;
+    color: {TEXT} !important;
+    text-align: left !important;
+    font-weight: 400 !important;
+    padding: 8px 12px !important;
+    border-radius: 8px !important;
+    width: 100% !important;
+}}
 </style>
 """, unsafe_allow_html=True)
 
-# ── MongoDB connection ────────────────────────────────────────────────────────
+# ── MongoDB ───────────────────────────────────────────────────────────────────
 @st.cache_resource
 def get_db():
     uri = st.secrets["MONGO_URI"]
@@ -158,12 +186,11 @@ def load(collection, query=None, projection=None):
     cursor = db[collection].find(query or {}, projection or {"_id": 0})
     return pd.DataFrame(list(cursor))
 
-# ── Filters (Group / Track) ───────────────────────────────────────────────────
+# ── Sidebar filters ───────────────────────────────────────────────────────────
 @st.cache_data(ttl=300)
 def get_group_track_map():
-    groups = load("group_summaries", projection={"_id": 0, "group_id": 1,
-                                                   "group_name": 1, "course_id": 1})
-    courses = load("courses", projection={"_id": 0, "course_id": 1, "course_name": 1})
+    groups  = load("group_summaries", projection={"_id": 0, "group_id": 1, "group_name": 1, "course_id": 1})
+    courses = load("courses",         projection={"_id": 0, "course_id": 1, "course_name": 1})
     if groups.empty:
         return pd.DataFrame(columns=["group_id", "group_name", "course_id", "course_name"])
     if not courses.empty and "course_id" in groups.columns:
@@ -178,20 +205,16 @@ def filter_sidebar():
         st.markdown(f'<div style="font-size:10px;color:{MUTED};letter-spacing:1.5px;'
                     f'text-transform:uppercase;padding:16px 0 8px 4px;">Filters</div>',
                     unsafe_allow_html=True)
-        track_options = sorted(gt_map["course_name"].dropna().unique().tolist()) if not gt_map.empty else []
+        track_options  = sorted(gt_map["course_name"].dropna().unique().tolist()) if not gt_map.empty else []
         selected_tracks = st.multiselect("Track", track_options, default=[], key="filter_tracks")
 
-        if selected_tracks and not gt_map.empty:
-            group_pool = gt_map[gt_map["course_name"].isin(selected_tracks)]
-        else:
-            group_pool = gt_map
-
+        group_pool    = gt_map[gt_map["course_name"].isin(selected_tracks)] if selected_tracks and not gt_map.empty else gt_map
         group_options = sorted(group_pool["group_name"].dropna().unique().tolist()) if not group_pool.empty else []
         selected_groups = st.multiselect("Group", group_options, default=[], key="filter_groups")
 
     selected_gids = []
     if not gt_map.empty:
-        pool = gt_map
+        pool = gt_map.copy()
         if selected_tracks:
             pool = pool[pool["course_name"].isin(selected_tracks)]
         if selected_groups:
@@ -205,67 +228,7 @@ def apply_group_filter(df, gids):
         return df[df["group_id"].isin(gids)]
     return df
 
-# ── Auth ──────────────────────────────────────────────────────────────────────
-def hash_pw(pw):
-    return hashlib.sha256(pw.encode()).hexdigest()
-
-def authenticate(username, password):
-    db = get_db()
-    user = db["users"].find_one(
-        {"username": username, "password": hash_pw(password)},
-        {"_id": 0}
-    )
-    return user
-
-def login_page():
-    col1, col2, col3 = st.columns([1, 1.2, 1])
-    with col2:
-        st.markdown("<br><br>", unsafe_allow_html=True)
-        logo_path = Path(__file__).parent / "logo.png"
-        if logo_path.exists():
-            with open(logo_path, "rb") as f:
-                b64 = base64.b64encode(f.read()).decode()
-            st.markdown(
-                f'<div style="text-align:center;margin-bottom:24px;">'
-                f'<img src="data:image/png;base64,{b64}" style="height:52px;"></div>',
-                unsafe_allow_html=True
-            )
-        st.markdown(f"""
-        <div style="text-align:center;margin-bottom:32px;">
-            <div style="font-size:10px;font-weight:600;letter-spacing:2px;
-                        color:{MUTED};text-transform:uppercase;margin-bottom:6px;">
-                KAYFA — كيف · DATA ANALYTICS
-            </div>
-            <div style="font-size:24px;font-weight:700;color:{TEXT};">
-                Student Analytics
-            </div>
-            <div style="font-size:13px;color:{BLUE};margin-top:4px;">
-                Sign in to access the dashboard
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-
-        username = st.text_input("Username", placeholder="Enter username")
-        password = st.text_input("Password", type="password", placeholder="Enter password")
-
-        if st.button("Sign In"):
-            if username and password:
-                user = authenticate(username, password)
-                if user:
-                    st.session_state["user"] = user
-                    st.rerun()
-                else:
-                    st.error("Invalid credentials")
-            else:
-                st.warning("Please enter both username and password")
-
-        st.markdown(f"""
-        <div style="text-align:center;margin-top:24px;font-size:11px;color:{MUTED};">
-            Demo: admin / admin123
-        </div>
-        """, unsafe_allow_html=True)
-
-# ── Chart theme ───────────────────────────────────────────────────────────────
+# ── Helpers ───────────────────────────────────────────────────────────────────
 def apply_theme(fig, title="", xlab="", ylab="", height=400):
     fig.update_layout(
         title=dict(text=title, font=dict(size=14, color=TEXT, family="Inter"),
@@ -273,12 +236,9 @@ def apply_theme(fig, title="", xlab="", ylab="", height=400):
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor=BG,
         font=dict(color=TEXT, family="Inter", size=11),
-        xaxis=dict(gridcolor=GRID, linecolor=BORDER, title=xlab,
-                   tickfont=dict(color=MUTED)),
-        yaxis=dict(gridcolor=GRID, linecolor=BORDER, title=ylab,
-                   tickfont=dict(color=MUTED)),
-        legend=dict(bgcolor="rgba(0,0,0,0)", bordercolor=BORDER,
-                    font=dict(color=TEXT)),
+        xaxis=dict(gridcolor=GRID, linecolor=BORDER, title=xlab, tickfont=dict(color=MUTED)),
+        yaxis=dict(gridcolor=GRID, linecolor=BORDER, title=ylab, tickfont=dict(color=MUTED)),
+        legend=dict(bgcolor="rgba(0,0,0,0)", bordercolor=BORDER, font=dict(color=TEXT)),
         margin=dict(t=50, b=40, l=40, r=20),
         height=height,
     )
@@ -293,47 +253,51 @@ def kpi(label, value, color_class="kpi-blue", sub=""):
     </div>"""
 
 def insight(text):
-    st.markdown(f'<div class="insight-box">{text}</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="insight-box">💡 {text}</div>', unsafe_allow_html=True)
 
 def section(title):
     st.markdown(f'<div class="section-title">{title}</div>', unsafe_allow_html=True)
 
 def cosine_sim(a, b):
-    a = np.asarray(a, dtype=float)
-    b = np.asarray(b, dtype=float)
-    na = np.linalg.norm(a)
-    nb = np.linalg.norm(b)
-    if na == 0 or nb == 0:
-        return 0.0
-    return float(np.dot(a, b) / (na * nb))
+    a, b = np.asarray(a, dtype=float), np.asarray(b, dtype=float)
+    na, nb = np.linalg.norm(a), np.linalg.norm(b)
+    return 0.0 if (na == 0 or nb == 0) else float(np.dot(a, b) / (na * nb))
 
 def kmeans_fit(X, k, n_init=10, max_iter=100, seed=42):
     rng = np.random.default_rng(seed)
-    best_inertia = None
-    best_labels = None
-    best_centers = None
-    for init in range(n_init):
-        idx = rng.choice(X.shape[0], size=k, replace=False)
+    best_inertia, best_labels, best_centers = None, None, None
+    for _ in range(n_init):
+        idx     = rng.choice(X.shape[0], size=k, replace=False)
         centers = X[idx].copy()
-        for _ in range(max_iter):
-            dists = ((X[:, None, :] - centers[None, :, :]) ** 2).sum(axis=2)
+        for __ in range(max_iter):
+            dists  = ((X[:, None, :] - centers[None, :, :]) ** 2).sum(axis=2)
             labels = dists.argmin(axis=1)
-            new_centers = np.array([
+            new_c  = np.array([
                 X[labels == c].mean(axis=0) if np.any(labels == c) else centers[c]
                 for c in range(k)
             ])
-            if np.allclose(new_centers, centers):
-                centers = new_centers
-                break
-            centers = new_centers
-        dists = ((X[:, None, :] - centers[None, :, :]) ** 2).sum(axis=2)
-        labels = dists.argmin(axis=1)
+            if np.allclose(new_c, centers): centers = new_c; break
+            centers = new_c
+        dists   = ((X[:, None, :] - centers[None, :, :]) ** 2).sum(axis=2)
+        labels  = dists.argmin(axis=1)
         inertia = dists[np.arange(X.shape[0]), labels].sum()
         if best_inertia is None or inertia < best_inertia:
-            best_inertia = inertia
-            best_labels = labels
-            best_centers = centers
+            best_inertia, best_labels, best_centers = inertia, labels, centers
     return best_inertia, best_labels, best_centers
+
+def silhouette(X, labels):
+    k = len(np.unique(labels))
+    if k < 2: return 0.0
+    scores = []
+    for i in range(len(X)):
+        own  = labels[i]
+        a    = np.mean([np.linalg.norm(X[i] - X[j]) for j in range(len(X)) if labels[j] == own and j != i]) if np.sum(labels == own) > 1 else 0
+        b    = min(
+            np.mean([np.linalg.norm(X[i] - X[j]) for j in range(len(X)) if labels[j] == c])
+            for c in np.unique(labels) if c != own
+        )
+        scores.append((b - a) / max(a, b) if max(a, b) > 0 else 0)
+    return float(np.mean(scores))
 
 # ── Header ────────────────────────────────────────────────────────────────────
 def render_header():
@@ -343,92 +307,177 @@ def render_header():
         with open(logo_path, "rb") as f:
             b64 = base64.b64encode(f.read()).decode()
         logo_html = f'<img src="data:image/png;base64,{b64}">'
-
     st.markdown(f"""
     <div class="top-bar">
         <div class="top-bar-left">
             <div class="top-bar-eyebrow">KAYFA — كيف · MONTH 1 · WEEK 2 · DATA ANALYTICS TRACK</div>
-            <div class="top-bar-title">Student Analytics</div>
-            <div class="top-bar-sub">Wrangle messy multi-source data into real insight.</div>
+            <div class="top-bar-title">Student Analytics Dashboard</div>
+            <div class="top-bar-sub">Multi-source data · Real insight · Actionable decisions</div>
         </div>
         <div class="top-bar-logo">{logo_html}</div>
     </div>
     """, unsafe_allow_html=True)
 
-# ── Pages ─────────────────────────────────────────────────────────────────────
+# ── Sidebar nav ───────────────────────────────────────────────────────────────
+PAGES = {
+    "📊  Overview":    "overview",
+    "🎓  Performance": "performance",
+    "⚡  Engagement":  "engagement",
+    "🧠  Concepts":    "concepts",
+    "🚨  At-Risk":     "risk",
+    "🔵  Segments":    "segments",
+    "👥  Groups":      "groups",
+}
+
+def sidebar():
+    with st.sidebar:
+        logo_path = Path(__file__).parent / "logo.png"
+        if logo_path.exists():
+            with open(logo_path, "rb") as f:
+                b64 = base64.b64encode(f.read()).decode()
+            st.markdown(
+                f'<div style="text-align:center;padding:16px 0 24px;">'
+                f'<img src="data:image/png;base64,{b64}" style="height:40px;"></div>',
+                unsafe_allow_html=True
+            )
+
+        st.markdown(f'<div style="font-size:10px;color:{MUTED};letter-spacing:1.5px;'
+                    f'text-transform:uppercase;padding:0 0 8px 4px;">Navigation</div>',
+                    unsafe_allow_html=True)
+
+        if "page" not in st.session_state:
+            st.session_state["page"] = "overview"
+
+        for label, key in PAGES.items():
+            active = st.session_state["page"] == key
+            # Highlight active tab with colored background
+            btn_bg    = f"rgba(75,123,255,0.18)" if active else "transparent"
+            btn_border = BLUE if active else "transparent"
+            btn_color  = TEXT
+            st.markdown(f"""
+            <div style="margin-bottom:4px;">
+                <div onclick="" style="
+                    background:{btn_bg};
+                    border:1px solid {btn_border};
+                    border-radius:8px;
+                    padding:9px 14px;
+                    font-size:13px;
+                    color:{btn_color};
+                    cursor:pointer;
+                    font-weight:{'600' if active else '400'};
+                    display:flex; align-items:center; gap:8px;
+                ">{label}</div>
+            </div>
+            """, unsafe_allow_html=True)
+            if st.button(label, key=f"nav_{key}", use_container_width=True,
+                         label_visibility="collapsed"):
+                st.session_state["page"] = key
+                st.rerun()
+
+        st.markdown("<br>", unsafe_allow_html=True)
+        user = st.session_state.get("user", {})
+        st.markdown(f"""
+        <div style="border-top:1px solid {BORDER};padding-top:16px;font-size:11px;color:{MUTED};">
+            <span style="color:{TEXT};font-weight:600;">{user.get('username','—')}</span>
+            <span style="color:{BLUE};"> · {user.get('role','')}</span>
+        </div>
+        """, unsafe_allow_html=True)
+
+    return st.session_state.get("page", "overview")
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  PAGES
+# ═══════════════════════════════════════════════════════════════════════════════
 
 def page_overview():
     section("PLATFORM OVERVIEW")
-    students  = load("students")
-    groups    = load("group_summaries")
-    risk      = load("at_risk_ranking")
-    concepts  = load("concept_failure_table")
+    students = load("students")
+    groups   = load("group_summaries")
+    risk     = load("at_risk_ranking")
+    concepts = load("concept_failure_table")
 
     n_students  = len(students)
     n_groups    = len(groups)
-    avg_att     = groups["attendance_rate"].mean() * 100
+    avg_att     = groups["attendance_rate"].mean() * 100 if not groups.empty else 0
     high_risk_n = (risk["risk_level"] == "High Risk").sum() if "risk_level" in risk.columns else 0
-    top_fail    = concepts.nsmallest(1, "avg_score").iloc[0] if len(concepts) else {}
+    top_fail    = concepts.nsmallest(1, "avg_score").iloc[0] if not concepts.empty else {}
 
     st.markdown(
         '<div class="kpi-row">'
-        + kpi("Total Students", f"{n_students:,}", "kpi-blue", "enrolled")
-        + kpi("Active Groups", str(n_groups), "kpi-purple", "this term")
-        + kpi("Platform Attendance", f"{avg_att:.1f}%", "kpi-green", "avg across groups")
-        + kpi("High Risk Students", str(high_risk_n), "kpi-red", "need contact")
-        + kpi("Weakest Concept", top_fail.get("concept_name", "—")[:18], "kpi-yellow",
+        + kpi("Total Students",       f"{n_students:,}", "kpi-blue",   "enrolled")
+        + kpi("Active Groups",         str(n_groups),    "kpi-purple",  "this term")
+        + kpi("Platform Attendance",   f"{avg_att:.1f}%","kpi-green",  "avg across groups")
+        + kpi("High Risk Students",    str(high_risk_n), "kpi-red",    "need contact")
+        + kpi("Weakest Concept",
+              top_fail.get("concept_name", "—")[:18], "kpi-yellow",
               f"{top_fail.get('fail_rate', 0):.0f}% fail rate")
         + '</div>',
         unsafe_allow_html=True
     )
 
     c1, c2 = st.columns(2)
+
     with c1:
         section("Q1 — ATTENDANCE RATE PER GROUP")
-        gf = groups.sort_values("attendance_rate")
-        avg = groups["attendance_rate"].mean()
-        colors = [RED if v < avg else GREEN for v in gf["attendance_rate"]]
-        fig = go.Figure(go.Bar(
-            x=(gf["attendance_rate"] * 100).round(1),
-            y=gf["group_id"], orientation="h",
-            marker_color=colors,
-            text=(gf["attendance_rate"] * 100).round(1).astype(str) + "%",
-            textposition="outside"
-        ))
-        fig.add_vline(x=avg * 100, line_dash="dash", line_color=MUTED,
-                      annotation_text=f"avg {avg*100:.1f}%", annotation_font_color=MUTED)
-        apply_theme(fig, "", "Attendance Rate (%)", "", 360)
-        fig.update_xaxes(range=[0, 105])
-        st.plotly_chart(fig, use_container_width=True)
-        insight("<strong>G07</strong> sits ~16 pts below platform average — the only group in critical range. Flag for instructor review this week.")
+        if not groups.empty:
+            gf  = groups.sort_values("attendance_rate")
+            avg = groups["attendance_rate"].mean()
+            fig = go.Figure(go.Bar(
+                x=(gf["attendance_rate"] * 100).round(1),
+                y=gf["group_id"],
+                orientation="h",
+                marker_color=[RED if v < avg else GREEN for v in gf["attendance_rate"]],
+                text=(gf["attendance_rate"] * 100).round(1).astype(str) + "%",
+                textposition="inside",
+                insidetextanchor="middle",
+            ))
+            fig.add_vline(x=avg * 100, line_dash="dash", line_color=MUTED,
+                          annotation_text=f"Platform avg  {avg*100:.1f}%",
+                          annotation_font_color=MUTED)
+            apply_theme(fig, "", "Attendance Rate (%)", "", 360)
+            fig.update_xaxes(range=[0, 110])
+            st.plotly_chart(fig, use_container_width=True)
+            below = gf[gf["attendance_rate"] < avg]
+            worst = gf.iloc[0]
+            insight(
+                f"<strong>{len(below)} group(s)</strong> sit below the platform average of "
+                f"<strong>{avg*100:.1f}%</strong>. "
+                f"Group <strong>{worst['group_id']}</strong> is the lowest at "
+                f"<strong>{worst['attendance_rate']*100:.1f}%</strong> — "
+                f"flag for instructor review this week before the gap widens further."
+            )
 
     with c2:
-        section("Q15 — GROUP GRADE TRENDS")
+        section("Q15 — GROUP GRADE TRENDS OVER THE TERM")
         trends = load("grade_trends_by_group")
         if not trends.empty:
-            fig2 = go.Figure()
             palette = [BLUE, GREEN, RED, YELLOW, PURPLE, "#00D4FF", "#FF6B35", "#A8FF3E", "#FF3EA8", "#3EFFDC"]
+            fig2 = go.Figure()
             for i, gid in enumerate(trends["group_id"].unique()):
                 sub = trends[trends["group_id"] == gid].sort_values("month")
                 fig2.add_trace(go.Scatter(
                     x=sub["month"], y=sub["avg_score"],
-                    mode="lines+markers", name=gid,
+                    mode="lines+markers", name=str(gid),
                     line=dict(color=palette[i % len(palette)], width=2),
                     marker=dict(size=5)
                 ))
             apply_theme(fig2, "", "Month", "Avg Score", 360)
             st.plotly_chart(fig2, use_container_width=True)
-            insight("Groups trending downward after mid-term signal pacing issues — difficulty ramps faster than students absorb.")
+            insight(
+                "Groups whose line <strong>slopes down after mid-term</strong> signal a pacing issue — "
+                "difficulty ramps faster than students can absorb. "
+                "Cross-reference these groups with the at-risk ranking to identify students who need early contact."
+            )
 
 
 def page_performance():
     section("Q2 — SCORE DISTRIBUTION BY ASSESSMENT TYPE")
-    ass = load("assessment_type_stats")
+    ass    = load("assessment_type_stats")
     grades = load("grades", projection={"_id": 0, "type": 1, "score": 1})
 
-    if not grades.empty:
-        type_order = ass.sort_values("mean", ascending=False)["type"].tolist()
-        colors_map = {"quiz": BLUE, "assignment": GREEN, "practical": YELLOW, "exam": RED}
+    if not grades.empty and not ass.empty:
+        type_order  = ass.sort_values("mean", ascending=False)["type"].tolist()
+        colors_map  = {"quiz": BLUE, "assignment": GREEN, "practical": YELLOW, "exam": RED}
         fig = go.Figure()
         for t in type_order:
             vals = grades[grades["type"] == t]["score"].dropna()
@@ -442,22 +491,32 @@ def page_performance():
         apply_theme(fig, "", "Assessment Type", "Score", 420)
         fig.update_layout(showlegend=False)
         st.plotly_chart(fig, use_container_width=True)
-        insight("Exams show the <strong>widest spread</strong> — polarised outcomes between top and bottom performers. Quizzes are the most consistent predictor of overall grade.")
+
+        # Derive actual insight from data
+        widest = ass.loc[ass["std"].idxmax(), "type"] if "std" in ass.columns else "exam"
+        most_consistent = ass.loc[ass["std"].idxmin(), "type"] if "std" in ass.columns else "quiz"
+        insight(
+            f"<strong>{widest.capitalize()}s</strong> show the widest score spread — "
+            "polarised outcomes between top and bottom performers indicate high variance in preparation. "
+            f"<strong>{most_consistent.capitalize()}s</strong> are the most consistent predictor of overall grade, "
+            "making them the best early warning signal for at-risk identification."
+        )
 
     section("Q3 — BEST & WORST COURSE BY AVERAGE GRADE")
-    grades_full = load("grades", projection={"_id": 0, "course_id": 1, "score": 1})
-    courses     = load("courses", projection={"_id": 0, "course_id": 1, "course_name": 1})
+    grades_full = load("grades",   projection={"_id": 0, "course_id": 1, "score": 1})
+    courses     = load("courses",  projection={"_id": 0, "course_id": 1, "course_name": 1})
     if not grades_full.empty and not courses.empty:
-        merged = grades_full.merge(courses, on="course_id", how="left")
-        course_avg = merged.groupby("course_name")["score"].agg(
-            avg="mean", std="std").reset_index().sort_values("avg", ascending=False)
+        merged     = grades_full.merge(courses, on="course_id", how="left")
+        course_avg = merged.groupby("course_name")["score"].agg(avg="mean", std="std").reset_index().sort_values("avg", ascending=False)
         bar_colors = [GREEN] + [BLUE] * (len(course_avg) - 2) + [RED]
         fig3 = go.Figure(go.Bar(
-            x=course_avg["course_name"], y=course_avg["avg"].round(1),
-            error_y=dict(type="data", array=course_avg["std"].round(1),
-                         visible=True, color=MUTED),
+            x=course_avg["course_name"],
+            y=course_avg["avg"].round(1),
+            error_y=dict(type="data", array=course_avg["std"].round(1), visible=True, color=MUTED),
             marker_color=bar_colors,
-            text=course_avg["avg"].round(1), textposition="outside"
+            text=course_avg["avg"].round(1),
+            textposition="inside",
+            insidetextanchor="middle",
         ))
         fig3.add_hline(y=course_avg["avg"].mean(), line_dash="dot",
                        line_color=MUTED, annotation_text="Platform avg",
@@ -467,110 +526,145 @@ def page_performance():
         st.plotly_chart(fig3, use_container_width=True)
         best  = course_avg.iloc[0]
         worst = course_avg.iloc[-1]
-        insight(f"<strong>{best['course_name']}</strong> leads at {best['avg']:.1f} pts. "
-                f"<strong>{worst['course_name']}</strong> trails at {worst['avg']:.1f} — a "
-                f"{best['avg']-worst['avg']:.1f}-pt gap warranting a curriculum review.")
+        gap   = best["avg"] - worst["avg"]
+        insight(
+            f"<strong>{best['course_name']}</strong> leads at <strong>{best['avg']:.1f} pts</strong>. "
+            f"<strong>{worst['course_name']}</strong> trails at <strong>{worst['avg']:.1f} pts</strong> — "
+            f"a <strong>{gap:.1f}-point gap</strong> that warrants a curriculum review. "
+            "High standard deviation in the worst course suggests inconsistent delivery, not just student difficulty."
+        )
 
 
 def page_engagement():
+    gids = st.session_state.get("selected_gids", [])
+
     section("Q4 — ATTENDANCE RATE VS AVERAGE GRADE")
     sf = load("student_profiles")
-    sf = apply_group_filter(sf, st.session_state.get("selected_gids", []))
+    sf = apply_group_filter(sf, gids)
     if not sf.empty:
-        corr = sf["attendance_rate"].corr(sf["avg_grade"])
+        q4   = sf[["attendance_rate", "avg_grade"]].dropna()
+        corr = q4["attendance_rate"].corr(q4["avg_grade"])
+
         fig = px.scatter(
             sf, x="attendance_rate", y="avg_grade",
             color="group_id", opacity=0.65,
-            color_discrete_sequence=[BLUE, GREEN, RED, YELLOW, PURPLE,
-                                      "#00D4FF", "#FF6B35", "#A8FF3E", "#FF3EA8", "#3EFFDC"],
-            labels={"attendance_rate": "Attendance Rate",
-                    "avg_grade": "Avg Grade", "group_id": "Group"},
+            color_discrete_sequence=[BLUE, GREEN, RED, YELLOW, PURPLE, "#00D4FF", "#FF6B35", "#A8FF3E"],
+            labels={"attendance_rate": "Attendance Rate", "avg_grade": "Avg Grade", "group_id": "Group"},
             hover_data=["full_name", "group_id"]
         )
-        q4 = sf[["attendance_rate", "avg_grade"]].dropna()
         slope, intercept = np.polyfit(q4["attendance_rate"], q4["avg_grade"], 1)
         xl = [float(q4["attendance_rate"].min()), float(q4["attendance_rate"].max())]
         fig.add_trace(go.Scatter(
             x=xl, y=[slope * x + intercept for x in xl],
             mode="lines", line=dict(color=YELLOW, width=2.5),
-            name="Trend", showlegend=False
+            name="Trend line", showlegend=False
         ))
-        apply_theme(fig, f"Pearson r = {corr:.3f}", "Attendance Rate", "Avg Grade", 420)
+        apply_theme(fig, f"Each dot = one student  ·  Trend line shows overall direction  ·  Pearson r = {corr:.3f}", "Attendance Rate", "Avg Grade", 420)
         fig.update_xaxes(tickformat=".0%")
         fig.update_traces(marker=dict(size=5), selector=dict(mode="markers"))
         st.plotly_chart(fig, use_container_width=True)
 
-        q4b = sf[["attendance_rate", "avg_grade"]].dropna().copy()
+        # Attendance band bar
+        q4b = q4.copy()
         q4b["attendance_band"] = pd.cut(
             q4b["attendance_rate"],
             bins=[0, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0],
-            labels=["<50%", "50-60%", "60-70%", "70-80%", "80-90%", "90-100%"]
+            labels=["<50%", "50–60%", "60–70%", "70–80%", "80–90%", "90–100%"]
         )
         band_stats = q4b.groupby("attendance_band", observed=True)["avg_grade"].mean().reset_index()
         fig_band = go.Figure(go.Bar(
             x=band_stats["attendance_band"].astype(str),
             y=band_stats["avg_grade"].round(1),
             marker_color=BLUE,
-            text=band_stats["avg_grade"].round(1), textposition="outside"
+            text=band_stats["avg_grade"].round(1),
+            textposition="inside",
+            insidetextanchor="middle",
         ))
-        apply_theme(fig_band, "Avg Grade by Attendance Band", "Attendance Band", "Avg Grade", 340)
+        apply_theme(fig_band, "Average Grade Rises with Attendance Band", "Attendance Band", "Avg Grade", 320)
+        fig_band.update_yaxes(range=[0, band_stats["avg_grade"].max() + 15])
         st.plotly_chart(fig_band, use_container_width=True)
-        insight(f"Pearson r = <strong>{corr:.3f}</strong> — moderate positive link. "
-                "Students attending >80% average ~10 pts higher than those below 50%.")
 
-    section("Q5 — ENGAGEMENT VS PERFORMANCE")
+        low_att  = sf[sf["attendance_rate"] < 0.5]["avg_grade"].mean()
+        high_att = sf[sf["attendance_rate"] >= 0.8]["avg_grade"].mean()
+        insight(
+            f"Pearson r = <strong>{corr:.3f}</strong> — a moderate positive relationship between attendance and grades. "
+            f"Students attending <strong>80%+</strong> average <strong>{high_att:.1f} pts</strong>, "
+            f"versus <strong>{low_att:.1f} pts</strong> for those below 50% — "
+            f"a <strong>{high_att - low_att:.1f}-point advantage</strong>. "
+            "Attendance alone doesn't guarantee high grades, but low attendance almost always predicts lower performance."
+        )
+
+    section("Q5 — ENGAGEMENT VS ACADEMIC PERFORMANCE")
     if not sf.empty:
         c1, c2 = st.columns(2)
-        for col, xcol, xlab, color in [
-            (c1, "login_count",      "Login Count",         BLUE),
-            (c2, "total_watch_time", "Watch Time (sec)",    PURPLE),
+        for col, xcol, xlab, color, x_fmt in [
+            (c1, "login_count",      "Login Count",      BLUE,   None),
+            (c2, "total_watch_time", "Watch Time (sec)", PURPLE, None),
         ]:
             with col:
-                q5 = sf[[xcol, "avg_grade"]].dropna()
-                r = q5[xcol].corr(q5["avg_grade"])
-                fig_e = px.scatter(q5, x=xcol, y="avg_grade",
-                                   opacity=0.55,
-                                   color_discrete_sequence=[color],
-                                   labels={xcol: xlab, "avg_grade": "Avg Grade"})
-                slope, intercept = np.polyfit(q5[xcol], q5["avg_grade"], 1)
-                xl = [float(q5[xcol].min()), float(q5[xcol].max())]
+                q5  = sf[[xcol, "avg_grade"]].dropna()
+                r   = q5[xcol].corr(q5["avg_grade"])
+                fig_e = go.Figure()
                 fig_e.add_trace(go.Scatter(
-                    x=xl, y=[slope * x + intercept for x in xl],
-                    mode="lines", line=dict(color=YELLOW, width=2),
-                    showlegend=False
+                    x=q5[xcol], y=q5["avg_grade"],
+                    mode="markers",
+                    marker=dict(color=color, size=4, opacity=0.55),
+                    showlegend=False,
                 ))
-                apply_theme(fig_e, f"r = {r:.3f}", xlab, "Avg Grade", 340)
-                fig_e.update_traces(marker=dict(size=4, color=color), selector=dict(mode="markers"))
+                s, b = np.polyfit(q5[xcol], q5["avg_grade"], 1)
+                xl   = [float(q5[xcol].min()), float(q5[xcol].max())]
+                fig_e.add_trace(go.Scatter(
+                    x=xl, y=[s * x + b for x in xl],
+                    mode="lines", line=dict(color=YELLOW, width=2),
+                    name="Trend", showlegend=False
+                ))
+                direction = "positive" if r > 0 else "negative"
+                strength  = "strong" if abs(r) > 0.5 else ("moderate" if abs(r) > 0.3 else "weak")
+                apply_theme(fig_e,
+                    f"{xlab} vs Grade  ·  {strength.capitalize()} {direction} correlation  (r = {r:.3f})",
+                    xlab, "Avg Grade", 340)
                 st.plotly_chart(fig_e, use_container_width=True)
-        insight("Failed concepts (r ≈ −0.85) is the strongest predictor — far ahead of watch time or logins. "
-                "<strong>Mastery drives grades, not passive consumption.</strong>")
 
-    section("Q9 — ATTENDANCE & ENGAGEMENT OVER THE TERM")
+        r_login = sf["login_count"].corr(sf["avg_grade"])
+        r_watch = sf["total_watch_time"].corr(sf["avg_grade"]) if "total_watch_time" in sf.columns else 0
+        insight(
+            f"Login count (r = <strong>{r_login:.3f}</strong>) and watch time (r = <strong>{r_watch:.3f}</strong>) "
+            "both show a positive link with grades — but the relationship is weaker than attendance or concept mastery. "
+            "<strong>Passive consumption (watching videos) doesn't replace active practice.</strong> "
+            "Students who log in frequently but still fail concepts are the 'Struggling Engaged' segment — "
+            "effort without the right strategy."
+        )
+
+    section("Q9 — ATTENDANCE & ENGAGEMENT TRENDS OVER THE TERM")
     ts_att = load("time_series_attendance")
     ts_eng = load("time_series_engagement")
     if not ts_att.empty and not ts_eng.empty:
         merged = ts_att.merge(ts_eng, on="month", how="outer").sort_values("month")
-        fig9 = make_subplots(specs=[[{"secondary_y": True}]])
+        fig9   = make_subplots(specs=[[{"secondary_y": True}]])
         fig9.add_trace(go.Scatter(
             x=merged["month"], y=merged["attendance_pct"],
             mode="lines+markers", name="Attendance %",
             line=dict(color=BLUE, width=2.5),
-            fill="tozeroy", fillcolor=f"rgba(75,123,255,0.08)"
+            fill="tozeroy", fillcolor="rgba(75,123,255,0.08)"
         ), secondary_y=False)
         fig9.add_trace(go.Bar(
             x=merged["month"], y=merged["event_count"],
-            name="Engagement Events", marker_color=f"rgba(255,183,0,0.45)"
+            name="Engagement Events", marker_color="rgba(255,183,0,0.4)"
         ), secondary_y=True)
-        apply_theme(fig9, "", "Month", "", 380)
+        apply_theme(fig9, "Blue = Attendance %  ·  Bars = Total Engagement Events per Month", "Month", "", 380)
         fig9.update_yaxes(title_text="Attendance (%)", secondary_y=False, range=[0, 100])
         fig9.update_yaxes(title_text="Events", secondary_y=True)
         st.plotly_chart(fig9, use_container_width=True)
-        insight("Simultaneous dips in both metrics point to a <strong>cohort-wide event</strong> — "
-                "cross-reference with the academic calendar (holidays, midterms, platform outages).")
+        insight(
+            "When both the blue line <strong>and</strong> the yellow bars dip in the same month, "
+            "that signals a <strong>cohort-wide event</strong> — not individual disengagement. "
+            "Cross-reference with the academic calendar: holidays, midterms, or platform outages are the usual culprits. "
+            "A solo dip in attendance without an engagement drop suggests students are studying independently but skipping sessions."
+        )
 
 
 def page_concepts():
-    section("Q6 — WEAKEST CONCEPTS BY FAILURE RATE")
+    section("Q6 — CONCEPTS WITH HIGHEST FAILURE RATE")
     cf = load("concept_failure_table")
     if not cf.empty:
         top12 = cf.nlargest(12, "fail_rate")
@@ -586,91 +680,114 @@ def page_concepts():
                               tickfont=dict(color=TEXT))
             ),
             text=top12["fail_rate"].round(1).astype(str) + "%",
-            textposition="outside"
+            textposition="inside",
+            insidetextanchor="end",
         ))
         fig.add_vline(x=40, line_dash="dash", line_color=MUTED,
-                      annotation_text="40% threshold", annotation_font_color=MUTED)
-        apply_theme(fig, "", "Fail Rate (%)", "", 480)
-        fig.update_xaxes(range=[0, 105])
+                      annotation_text="40% failure threshold", annotation_font_color=MUTED)
+        apply_theme(fig, "Bar length = Fail Rate  ·  Color = Avg Score (red = low, green = high)", "Fail Rate (%)", "", 480)
+        fig.update_xaxes(range=[0, 110])
         fig.update_layout(margin=dict(l=260))
         st.plotly_chart(fig, use_container_width=True)
 
-        worst = cf.loc[cf["avg_score"].idxmin()]
-        insight(f"Biggest weak spot: <strong>{worst['concept_name']}</strong> "
-                f"in {worst['course_name']} — "
-                f"{worst['avg_score']:.1f}% avg score, {worst['fail_rate']:.1f}% fail rate. "
-                "Targeted remedial sessions on the bottom 3 concepts would have the highest ROI.")
+        above_thresh = (top12["fail_rate"] > 40).sum()
+        worst        = cf.loc[cf["avg_score"].idxmin()]
+        insight(
+            f"<strong>{above_thresh} concepts</strong> exceed the 40% failure threshold — "
+            "these are structural curriculum weaknesses, not individual student failures. "
+            f"The single worst concept is <strong>{worst['concept_name']}</strong> "
+            f"in {worst['course_name']} — only <strong>{worst['avg_score']:.1f}% avg score</strong> "
+            f"with a <strong>{worst['fail_rate']:.1f}% fail rate</strong>. "
+            "Targeted remedial sessions on the bottom 3 concepts would have the highest ROI per hour of instructor time."
+        )
 
-    section("Q7 — MASTERY TREND FOR WEAKEST CONCEPT")
+    section("Q7 — MASTERY TREND FOR THE WEAKEST CONCEPT")
     concepts_raw = load("concepts", projection={"_id": 0, "concept_name": 1,
-                                                 "course_id": 1, "score_pct": 1,
-                                                 "mastery_status": 1, "timestamp": 1})
+                                                  "course_id": 1, "score_pct": 1,
+                                                  "mastery_status": 1, "timestamp": 1})
     if not concepts_raw.empty and not cf.empty:
-        worst_name    = cf.loc[cf["avg_score"].idxmin(), "concept_name"]
-        worst_course  = cf.loc[cf["avg_score"].idxmin(), "course_id"]
+        worst_name   = cf.loc[cf["avg_score"].idxmin(), "concept_name"]
+        worst_course = cf.loc[cf["avg_score"].idxmin(), "course_id"]
         q7 = concepts_raw[
             (concepts_raw["concept_name"] == worst_name) &
             (concepts_raw["course_id"]    == worst_course)
         ].copy()
         q7["month"] = pd.to_datetime(q7["timestamp"]).dt.to_period("M").astype(str)
         monthly = q7.groupby("month").agg(
-            avg_score=("score_pct", "mean"),
+            avg_score=("score_pct",      "mean"),
             pass_rate=("mastery_status", lambda x: (x == "passed").mean() * 100),
-            n=("score_pct", "count")
+            n=("score_pct",              "count")
         ).reset_index()
 
         fig7 = make_subplots(specs=[[{"secondary_y": True}]])
         fig7.add_trace(go.Bar(x=monthly["month"], y=monthly["n"],
-            name="# Records", marker_color=f"rgba(75,123,255,0.2)"), secondary_y=True)
+            name="Attempt Count", marker_color="rgba(75,123,255,0.2)"), secondary_y=True)
         fig7.add_trace(go.Scatter(x=monthly["month"], y=monthly["avg_score"],
             mode="lines+markers", name="Avg Score %",
             line=dict(color=BLUE, width=3), marker=dict(size=8)), secondary_y=False)
         fig7.add_trace(go.Scatter(x=monthly["month"], y=monthly["pass_rate"],
             mode="lines+markers", name="Pass Rate %",
-            line=dict(color=GREEN, width=3, dash="dot"), marker=dict(size=8,symbol="diamond")), secondary_y=False)
+            line=dict(color=GREEN, width=3, dash="dot"),
+            marker=dict(size=8, symbol="diamond")), secondary_y=False)
         fig7.add_hline(y=60, line_dash="dash", line_color=RED,
                        annotation_text="Pass threshold 60%", annotation_font_color=RED)
-        apply_theme(fig7, f"'{worst_name}' — Monthly Mastery", "Month", "", 380)
+        apply_theme(fig7, f"Monthly mastery for  '{worst_name}'  —  Blue = avg score  ·  Green = pass rate  ·  Bars = attempts", "Month", "", 380)
         fig7.update_yaxes(title_text="Score / Pass Rate (%)", range=[0, 100], secondary_y=False)
-        fig7.update_yaxes(title_text="Count", secondary_y=True)
+        fig7.update_yaxes(title_text="Attempt Count", secondary_y=True)
         st.plotly_chart(fig7, use_container_width=True)
 
         if len(monthly) >= 2:
             slope = monthly["avg_score"].iloc[-1] - monthly["avg_score"].iloc[0]
-            trend = "improving 📈" if slope > 1 else ("declining 📉" if slope < -1 else "flat ➡️")
-            insight(f"Trend is <strong>{trend}</strong> ({slope:+.1f} pts over the term). "
-                    "A flat or declining slope means the issue is structural — students are not self-correcting.")
+            if slope > 2:
+                trend_txt = f"improving (+{slope:.1f} pts over the term) — interventions are working"
+                trend_action = "Maintain current support and document what changed."
+            elif slope < -2:
+                trend_txt = f"declining ({slope:.1f} pts over the term) — students are not self-correcting"
+                trend_action = "This concept needs a full redesign in the next term, not just extra practice."
+            else:
+                trend_txt = "flat — no improvement despite repeated exposure"
+                trend_action = "A flat trend means the issue is structural. Review how this concept is taught, not just how much."
+            insight(
+                f"Mastery trend is <strong>{trend_txt}</strong>. "
+                f"<strong>{trend_action}</strong> "
+                f"Current pass rate: <strong>{monthly['pass_rate'].iloc[-1]:.1f}%</strong> "
+                f"vs the 60% threshold — "
+                f"{'above threshold ✓' if monthly['pass_rate'].iloc[-1] >= 60 else 'still below threshold — action required'}."
+            )
 
 
 def page_risk():
+    gids = st.session_state.get("selected_gids", [])
+
     section("Q14 — AT-RISK STUDENT RANKING")
     risk = load("at_risk_ranking")
-    risk = apply_group_filter(risk, st.session_state.get("selected_gids", []))
+    risk = apply_group_filter(risk, gids)
+
     if not risk.empty:
-        top10 = risk.nlargest(10, "risk_score")
-        risk_color = {
-            "High Risk":   RED,
-            "Medium Risk": YELLOW,
-            "Low Risk":    GREEN,
-        }
+        top10      = risk.nlargest(10, "risk_score")
+        risk_color = {"High Risk": RED, "Medium Risk": YELLOW, "Low Risk": GREEN}
+
         dist = risk["risk_level"].value_counts().reset_index()
         dist.columns = ["level", "count"]
 
         c1, c2 = st.columns([2, 1])
         with c1:
             fig = go.Figure(go.Bar(
-                x=top10["risk_score"],
+                x=top10["risk_score"].round(3),
                 y=top10["full_name"],
                 orientation="h",
                 marker_color=[risk_color.get(str(r), BLUE) for r in top10["risk_level"]],
-                text=[f"att:{a:.0%}  grade:{g:.0f}  fail:{f:.0f}"
-                      for a, g, f in zip(top10["attendance_rate"],
-                                         top10["avg_grade"],
-                                         top10["failed_concepts"])],
-                textposition="outside"
+                text=[
+                    f"att {a:.0%}  grade {g:.0f}  failed {f:.0f}"
+                    for a, g, f in zip(top10["attendance_rate"],
+                                       top10["avg_grade"],
+                                       top10["failed_concepts"])
+                ],
+                textposition="inside",
+                insidetextanchor="end",
             ))
-            apply_theme(fig, "Top 10 — contact these students first", "Risk Score", "", 400)
-            fig.update_xaxes(range=[0, 0.85])
+            apply_theme(fig, "Top 10 students to contact first — sorted by composite risk score", "Risk Score (0–1)", "", 400)
+            fig.update_xaxes(range=[0, 0.95])
             st.plotly_chart(fig, use_container_width=True)
 
         with c2:
@@ -683,204 +800,364 @@ def page_risk():
             apply_theme(fig_pie, "Risk Distribution", height=400)
             st.plotly_chart(fig_pie, use_container_width=True)
 
-        insight("The top 10 at-risk students share: attendance <50%, avg grade <60, 10+ failed concepts. "
-                "<strong>Contact them in the first week of the next term</strong> — early intervention has the highest ROI.")
+        high_n = (risk["risk_level"] == "High Risk").sum()
+        high_att_mean  = risk[risk["risk_level"] == "High Risk"]["attendance_rate"].mean()
+        high_grade_mean = risk[risk["risk_level"] == "High Risk"]["avg_grade"].mean()
+        insight(
+            f"<strong>{high_n} students</strong> are flagged as High Risk. "
+            f"On average they attend <strong>{high_att_mean:.0%}</strong> of sessions "
+            f"and score <strong>{high_grade_mean:.1f} pts</strong>. "
+            "These students share low attendance, low grades, and high failed concepts — "
+            "a combination that rarely self-corrects without direct instructor contact. "
+            "<strong>Do not send automated emails — a personal call in the first week of next term "
+            "has the highest recovery rate.</strong>"
+        )
 
         section("Q8 — LATE SUBMISSION EFFECT ON GRADES")
-        subs = load("submissions", projection={"_id": 0, "student_id": 1,
-                                                "course_id": 1, "is_late": 1})
-        grades_raw = load("grades", projection={"_id": 0, "student_id": 1,
-                                                  "course_id": 1, "score": 1})
+        subs       = load("submissions", projection={"_id": 0, "student_id": 1, "course_id": 1, "is_late": 1})
+        grades_raw = load("grades",      projection={"_id": 0, "student_id": 1, "course_id": 1, "score": 1})
         if not subs.empty and not grades_raw.empty:
             avg_g = grades_raw.groupby(["student_id", "course_id"])["score"].mean().reset_index()
-            q8 = subs.merge(avg_g, on=["student_id", "course_id"], how="left").dropna(subset=["score"])
+            q8    = subs.merge(avg_g, on=["student_id", "course_id"], how="left").dropna(subset=["score"])
             q8["status"] = q8["is_late"].map({True: "Late", False: "On Time"})
-            stats8 = q8.groupby("status")["score"].agg(["mean", "std"]).round(2)
 
             fig8 = go.Figure()
             for status, color in [("On Time", GREEN), ("Late", RED)]:
                 vals = q8[q8["status"] == status]["score"]
                 fig8.add_trace(go.Box(y=vals, name=status, marker_color=color,
                                       boxmean=True, boxpoints="outliers"))
-            apply_theme(fig8, "", "Submission Status", "Avg Grade", 360)
+            apply_theme(fig8, "On-time vs Late submissions — grade distribution comparison", "Submission Status", "Avg Grade", 360)
             st.plotly_chart(fig8, use_container_width=True)
-            if "On Time" in stats8.index and "Late" in stats8.index:
-                gap = stats8.loc["On Time", "mean"] - stats8.loc["Late", "mean"]
-                insight(f"On-time submitters score <strong>{gap:.1f} pts higher</strong> on average. "
-                        "A 48-hour deadline reminder could close most of this gap.")
 
-        subs_full = load("submissions", projection={"_id": 0, "student_id": 1,
-                                                      "assessment_id": 1,
-                                                      "deadline": 1, "submitted_at": 1})
-        grades_score = load("grades", projection={"_id": 0, "assessment_id": 1,
-                                                    "student_id": 1, "score": 1})
+            stats8 = q8.groupby("status")["score"].mean()
+            if "On Time" in stats8.index and "Late" in stats8.index:
+                gap = stats8["On Time"] - stats8["Late"]
+                insight(
+                    f"On-time submitters score <strong>{gap:.1f} pts higher</strong> on average "
+                    f"(<strong>{stats8['On Time']:.1f}</strong> vs <strong>{stats8['Late']:.1f}</strong>). "
+                    "This gap is likely causal — students who submit late are also the ones least prepared. "
+                    "A 48-hour deadline reminder notification could close most of this gap with minimal effort."
+                )
+
+        subs_full   = load("submissions", projection={"_id": 0, "student_id": 1, "assessment_id": 1,
+                                                       "deadline": 1, "submitted_at": 1})
+        grades_score = load("grades", projection={"_id": 0, "assessment_id": 1, "student_id": 1, "score": 1})
         if not subs_full.empty and not grades_score.empty:
-            subs_full["deadline"] = pd.to_datetime(subs_full["deadline"], errors="coerce")
+            subs_full["deadline"]     = pd.to_datetime(subs_full["deadline"],     errors="coerce")
             subs_full["submitted_at"] = pd.to_datetime(subs_full["submitted_at"], errors="coerce")
-            subs_scored = subs_full.merge(
-                grades_score, on=["assessment_id", "student_id"], how="left"
-            ).dropna(subset=["score"])
-            subs_scored["days_before"] = (
-                (subs_scored["deadline"] - subs_scored["submitted_at"]).dt.total_seconds() / 86400
-            )
+            subs_scored = subs_full.merge(grades_score, on=["assessment_id", "student_id"], how="left").dropna(subset=["score"])
+            subs_scored["days_before"] = (subs_scored["deadline"] - subs_scored["submitted_at"]).dt.total_seconds() / 86400
             subs_scored["timing"] = pd.cut(
                 subs_scored["days_before"],
                 bins=[-999, 0, 1, 3, 999],
-                labels=["Late (after deadline)", "Same day (0-1d)", "1-3 days early", ">3 days early"]
+                labels=["Late", "Same day", "1–3 days early", ">3 days early"]
             )
             bucket = subs_scored.groupby("timing", observed=True)["score"].mean().round(1).reset_index()
-            color_map = {
-                "Late (after deadline)": RED,
-                "Same day (0-1d)": YELLOW,
-                "1-3 days early": BLUE,
-                ">3 days early": GREEN
-            }
+            color_map = {"Late": RED, "Same day": YELLOW, "1–3 days early": BLUE, ">3 days early": GREEN}
             fig8b = go.Figure(go.Bar(
                 x=bucket["timing"].astype(str),
                 y=bucket["score"],
                 marker_color=[color_map.get(t, BLUE) for t in bucket["timing"].astype(str)],
-                text=bucket["score"], textposition="outside", width=0.5
+                text=bucket["score"],
+                textposition="inside",
+                insidetextanchor="middle",
+                width=0.5
             ))
-            apply_theme(fig8b, "Avg Score by Submission Timing", "Submission Timing", "Avg Score", 360)
+            apply_theme(fig8b, "Avg Grade by Submission Timing — earlier submissions score higher", "Submission Timing", "Avg Score", 360)
             fig8b.update_yaxes(range=[0, bucket["score"].max() + 15])
             st.plotly_chart(fig8b, use_container_width=True)
 
 
 def page_segments():
-    section("Q11 — STUDENT SEGMENTATION")
     gids = st.session_state.get("selected_gids", [])
+
+    section("Q11 — STUDENT SEGMENTATION (KMEANS CLUSTERING)")
     clusters = load("cluster_assignments")
     clusters = apply_group_filter(clusters, gids)
+    sf11     = load("student_profiles")
+    sf11     = apply_group_filter(sf11, gids)
 
-    sf11 = load("student_profiles")
-    sf11 = apply_group_filter(sf11, gids)
+    FEATS       = ["avg_grade", "attendance_rate", "login_count", "total_watch_time", "failed_concepts"]
+    FEAT_LABELS = ["Avg Grade",  "Attendance %",   "Login Count", "Watch Time",        "Failed Concepts"]
+
     if not sf11.empty:
-        feats = ["avg_grade", "attendance_rate", "login_count", "total_watch_time", "failed_concepts"]
-        feats = [f for f in feats if f in sf11.columns]
-        if feats:
-            X = sf11[feats].fillna(0).to_numpy(dtype=float)
-            mean = X.mean(axis=0)
-            std = X.std(axis=0)
-            std[std == 0] = 1
-            X_sc = (X - mean) / std
+        feats_avail = [f for f in FEATS if f in sf11.columns]
+        X     = sf11[feats_avail].fillna(0).to_numpy(dtype=float)
+        mean  = X.mean(axis=0); std = X.std(axis=0); std[std == 0] = 1
+        X_sc  = (X - mean) / std
 
-            _, labels_arr, _ = kmeans_fit(X_sc, 4)
+        # ── Silhouette + Elbow ─────────────────────────────────────────────
+        inertias, sil_scores = [], []
+        K_RANGE = range(2, 8)
+        for k in K_RANGE:
+            inertia, lbl, _ = kmeans_fit(X_sc, k, n_init=5)
+            inertias.append(inertia)
+            sil_scores.append(silhouette(X_sc, lbl))
 
-            sf11_labeled = sf11[feats].fillna(0).copy()
-            sf11_labeled["cluster"] = labels_arr
+        best_k = list(K_RANGE)[sil_scores.index(max(sil_scores))]
 
-            c_means = sf11_labeled.groupby("cluster")[feats].mean().reset_index()
-            c_norm = c_means.copy()
-            cmin = c_means[feats].min()
-            cmax = c_means[feats].max()
-            crange = (cmax - cmin).replace(0, 1)
-            c_norm[feats] = (c_means[feats] - cmin) / crange
+        fig_sel = make_subplots(rows=1, cols=2,
+            subplot_titles=["Inertia (Elbow) — lower = tighter clusters",
+                            "Silhouette Score — higher = better separation"])
+        fig_sel.add_trace(go.Scatter(x=list(K_RANGE), y=inertias,
+            mode="lines+markers", line=dict(color=BLUE, width=2), marker=dict(size=7),
+            name="Inertia"), row=1, col=1)
+        fig_sel.add_trace(go.Scatter(x=list(K_RANGE), y=[round(s, 3) for s in sil_scores],
+            mode="lines+markers", line=dict(color=GREEN, width=2), marker=dict(size=7),
+            name="Silhouette"), row=1, col=2)
+        fig_sel.add_vline(x=best_k, line_dash="dash", line_color=YELLOW,
+            annotation_text=f"Best k = {best_k}  (sil = {max(sil_scores):.3f})",
+            annotation_font_color=YELLOW)
+        fig_sel.update_layout(
+            title=dict(text=f"Optimal number of clusters = {best_k}  (chosen by silhouette score)",
+                       font=dict(size=13, color=TEXT, family="Inter"), x=0, xanchor="left"),
+            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor=BG,
+            font=dict(color=TEXT, family="Inter", size=11),
+            margin=dict(t=60, b=40), showlegend=False, height=320,
+        )
+        fig_sel.update_xaxes(gridcolor=GRID, linecolor=BORDER, title_text="k", tickfont=dict(color=MUTED))
+        fig_sel.update_yaxes(gridcolor=GRID, linecolor=BORDER, tickfont=dict(color=MUTED))
+        st.plotly_chart(fig_sel, use_container_width=True)
 
-            med = c_means[feats].median()
-            seg_labels = []
-            for _, row in c_means.iterrows():
-                if row["avg_grade"] >= med["avg_grade"] and row["attendance_rate"] >= med["attendance_rate"]:
-                    seg_labels.append("High Achiever")
-                elif row["avg_grade"] < med["avg_grade"] and row["attendance_rate"] < med["attendance_rate"]:
-                    seg_labels.append("At Risk")
-                elif row["login_count"] < med["login_count"]:
-                    seg_labels.append("Disengaged")
-                else:
-                    seg_labels.append("Average")
+        # ── Final clustering with best_k ────────────────────────────────────
+        _, labels_arr, _ = kmeans_fit(X_sc, best_k, n_init=10)
+        sf11_labeled = sf11[feats_avail].fillna(0).copy()
+        sf11_labeled["cluster"]   = labels_arr
+        sf11_labeled["full_name"] = sf11["full_name"].values if "full_name" in sf11.columns else ""
+        if "attendance_rate" in sf11.columns:
+            sf11_labeled["att_pct"] = sf11["attendance_rate"].fillna(0) * 100
 
-            c_norm["segment"] = [f"C{int(r['cluster'])} - {seg_labels[i]}"
-                                  for i, (_, r) in enumerate(c_norm.iterrows())]
+        c_means = sf11_labeled.groupby("cluster")[feats_avail].mean()
+        med     = sf11_labeled[feats_avail].median()
 
-            melted = c_norm.melt(id_vars="segment", value_vars=feats)
-            fig_profiles = px.bar(
-                melted, x="variable", y="value",
-                color="segment", barmode="group",
-                color_discrete_sequence=[BLUE, GREEN, RED, PURPLE],
-                labels={"variable": "Feature", "value": "Normalized (0-1)", "segment": "Segment"},
-            )
-            apply_theme(fig_profiles, "Cluster Profiles (Normalized 0-1)",
-                        "Feature", "Normalized Score", 380)
-            st.plotly_chart(fig_profiles, use_container_width=True)
+        seg_map = {}
+        for ci, row in c_means.iterrows():
+            hg = row["avg_grade"]       >= med["avg_grade"]
+            ha = row["attendance_rate"] >= med["attendance_rate"]
+            he = row["login_count"]     >= med["login_count"]
+            if hg and ha and he:
+                seg_map[ci] = "High Achiever"
+            elif not hg and not ha:
+                seg_map[ci] = "At Risk"
+            elif hg and not ha:
+                seg_map[ci] = "Self-Directed"
+            elif not hg and he:
+                seg_map[ci] = "Struggling Engaged"
+            else:
+                seg_map[ci] = "Average"
 
-    if not clusters.empty:
-        seg_order = clusters["cluster_label"].unique().tolist()
-        seg_colors = {seg: c for seg, c in zip(seg_order, [BLUE, GREEN, RED, PURPLE])}
-        c1, c2 = st.columns([1.6, 1])
+        sf11_labeled["segment"] = sf11_labeled["cluster"].map(seg_map)
+        seg_order = list(dict.fromkeys(sf11_labeled["segment"].dropna()))
+
+        # ── Donut: distribution ─────────────────────────────────────────────
+        seg_counts = sf11_labeled["segment"].value_counts().reset_index()
+        seg_counts.columns = ["segment", "n"]
+        seg_counts["pct"] = (seg_counts["n"] / len(sf11_labeled) * 100).round(1)
+
+        c1, c2 = st.columns([1, 1.6])
         with c1:
-            fig = px.scatter(
-                clusters,
-                x="attendance_rate", y="avg_grade",
-                color="cluster_label",
-                color_discrete_map=seg_colors,
-                opacity=0.7,
-                labels={"attendance_rate": "Attendance Rate",
-                        "avg_grade": "Avg Grade",
-                        "cluster_label": "Segment"},
-            )
-            apply_theme(fig, "Cluster View: Grade vs Attendance",
-                        "Attendance Rate", "Avg Grade", 440)
-            fig.update_xaxes(tickformat=".0%")
-            fig.update_traces(marker=dict(size=7))
-            st.plotly_chart(fig, use_container_width=True)
-
-        with c2:
-            counts = clusters["cluster_label"].value_counts().reset_index()
-            counts.columns = ["segment", "n"]
-            fig2 = go.Figure(go.Pie(
-                labels=counts["segment"], values=counts["n"],
-                marker_colors=[seg_colors.get(s, BLUE) for s in counts["segment"]],
-                textinfo="label+value", hole=0.4,
-                textfont=dict(color=TEXT)
+            fig_donut = go.Figure(go.Pie(
+                labels=seg_counts["segment"],
+                values=seg_counts["n"],
+                text=seg_counts["pct"].astype(str) + "%",
+                textinfo="label+text",
+                hole=0.48,
+                marker=dict(colors=[SEG_COLORS.get(s, MUTED) for s in seg_counts["segment"]]),
+                textfont=dict(size=11),
             ))
-            apply_theme(fig2, "Segment Sizes", height=440)
-            st.plotly_chart(fig2, use_container_width=True)
+            fig_donut.update_layout(
+                title=dict(text="Segment Distribution", font=dict(size=13, color=TEXT, family="Inter"),
+                           x=0, xanchor="left"),
+                paper_bgcolor="rgba(0,0,0,0)",
+                font=dict(color=TEXT, family="Inter", size=11),
+                legend=dict(bgcolor="rgba(0,0,0,0)", bordercolor=BORDER, font=dict(color=TEXT)),
+                margin=dict(t=50, b=20, l=0, r=0),
+                height=360,
+            )
+            st.plotly_chart(fig_donut, use_container_width=True)
 
-        insight("<strong>At Risk</strong> students need direct instructor contact — not automated emails. "
-                "<strong>Disengaged</strong> students are the most responsive to a single well-timed nudge.")
+        # ── Radar ────────────────────────────────────────────────────────────
+        with c2:
+            c_means_seg  = sf11_labeled.groupby("segment")[feats_avail].mean()
+            cmin, cmax   = c_means_seg.min(), c_means_seg.max()
+            crange       = (cmax - cmin).replace(0, 1)
+            c_norm_df    = (c_means_seg - cmin) / crange
 
+            fig_radar = go.Figure()
+            cats = FEAT_LABELS + [FEAT_LABELS[0]]
+            for seg, row in c_norm_df.iterrows():
+                vals = list(row.values) + [row.values[0]]
+                fig_radar.add_trace(go.Scatterpolar(
+                    r=vals, theta=cats, fill="toself", opacity=0.5,
+                    name=seg,
+                    line=dict(color=SEG_COLORS.get(seg, MUTED), width=2),
+                ))
+            fig_radar.update_layout(
+                polar=dict(
+                    bgcolor=PANEL,
+                    radialaxis=dict(visible=True, range=[0, 1], gridcolor=GRID, tickfont=dict(color=TEXT, size=9)),
+                    angularaxis=dict(gridcolor=GRID, tickfont=dict(color=TEXT, size=11)),
+                ),
+                paper_bgcolor="rgba(0,0,0,0)",
+                font=dict(color=TEXT, family="Inter"),
+                title=dict(text="Segment Profiles — Normalized 0 to 1", font=dict(size=13, color=TEXT, family="Inter"),
+                           x=0, xanchor="left"),
+                legend=dict(bgcolor="rgba(0,0,0,0)", bordercolor=BORDER, font=dict(color=TEXT)),
+                margin=dict(t=50, b=20, l=40, r=40),
+                height=360,
+            )
+            st.plotly_chart(fig_radar, use_container_width=True)
+
+        # ── Grouped bar: raw means ────────────────────────────────────────────
+        bar_df = c_means_seg.reset_index().melt(id_vars="segment", value_vars=feats_avail)
+        lmap   = dict(zip(FEATS, FEAT_LABELS))
+        bar_df["feature"] = bar_df["feature"].map(lmap)
+        fig_bar = go.Figure()
+        for seg in seg_order:
+            sub = bar_df[bar_df["segment"] == seg]
+            fig_bar.add_trace(go.Bar(
+                x=sub["feature"], y=sub["value"].round(2),
+                name=seg,
+                marker_color=SEG_COLORS.get(seg, MUTED),
+                text=sub["value"].round(1),
+                textposition="inside",
+                insidetextanchor="end",
+            ))
+        fig_bar.update_layout(
+            barmode="group",
+            title=dict(text="Raw Feature Averages per Segment — what actually defines each group",
+                       font=dict(size=13, color=TEXT, family="Inter"), x=0, xanchor="left"),
+            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor=BG,
+            font=dict(color=TEXT, family="Inter", size=11),
+            legend=dict(bgcolor="rgba(0,0,0,0)", bordercolor=BORDER, font=dict(color=TEXT)),
+            margin=dict(t=50, b=60, l=40, r=20),
+            xaxis=dict(gridcolor=GRID, linecolor=BORDER, tickfont=dict(color=MUTED)),
+            yaxis=dict(gridcolor=GRID, linecolor=BORDER, tickfont=dict(color=MUTED)),
+            height=380,
+        )
+        st.plotly_chart(fig_bar, use_container_width=True)
+
+        # ── Bubble scatter ────────────────────────────────────────────────────
+        fig_scat = go.Figure()
+        lc_col = "login_count" if "login_count" in sf11_labeled.columns else feats_avail[0]
+        for seg in seg_order:
+            sub = sf11_labeled[sf11_labeled["segment"] == seg]
+            lc  = sub[lc_col].clip(upper=sub[lc_col].quantile(0.95)) if len(sub) > 1 else sub[lc_col]
+            fig_scat.add_trace(go.Scatter(
+                x=sub["att_pct"] if "att_pct" in sub.columns else sub[feats_avail[1]] * 100,
+                y=sub["avg_grade"],
+                mode="markers",
+                name=seg,
+                marker=dict(
+                    color=SEG_COLORS.get(seg, MUTED),
+                    size=lc, sizemode="area", sizeref=0.15,
+                    opacity=0.75,
+                    line=dict(width=0.5, color="rgba(255,255,255,0.2)"),
+                ),
+                text=sub["full_name"],
+                hovertemplate=(
+                    "<b>%{text}</b><br>"
+                    "Attendance: %{x:.1f}%<br>"
+                    "Grade: %{y:.1f}<br>"
+                    f"Segment: {seg}<extra></extra>"
+                ),
+            ))
+        fig_scat.update_layout(
+            title=dict(text="Grade vs Attendance  ·  Bubble size = Login Count  ·  Color = Segment",
+                       font=dict(size=13, color=TEXT, family="Inter"), x=0, xanchor="left"),
+            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor=BG,
+            font=dict(color=TEXT, family="Inter", size=11),
+            legend=dict(bgcolor="rgba(0,0,0,0)", bordercolor=BORDER, font=dict(color=TEXT)),
+            margin=dict(t=50, b=40, l=40, r=20),
+            xaxis=dict(title="Attendance %", gridcolor=GRID, linecolor=BORDER, tickfont=dict(color=MUTED)),
+            yaxis=dict(title="Avg Grade",    gridcolor=GRID, linecolor=BORDER, tickfont=dict(color=MUTED)),
+            height=420,
+        )
+        st.plotly_chart(fig_scat, use_container_width=True)
+
+        # ── Per-segment insights ──────────────────────────────────────────────
+        section("SEGMENT INSIGHTS")
+        for seg in seg_order:
+            sub   = sf11_labeled[sf11_labeled["segment"] == seg]
+            means = sub[feats_avail].mean()
+            color = SEG_COLORS.get(seg, MUTED)
+            pct   = len(sub) / len(sf11_labeled) * 100
+            st.markdown(f"""
+            <div class="insight-box" style="border-color:{color}33;margin-bottom:10px;">
+                <span style="color:{color};font-weight:700;font-size:14px;">● {seg}</span>
+                <span style="color:{MUTED};font-size:12px;margin-left:10px;">{len(sub)} students · {pct:.1f}%</span><br>
+                <span style="font-size:12px;color:{MUTED};">
+                    Grade <strong style="color:{TEXT};">{means['avg_grade']:.1f}</strong> ·
+                    Attendance <strong style="color:{TEXT};">{means['attendance_rate']*100:.0f}%</strong> ·
+                    Logins <strong style="color:{TEXT};">{means['login_count']:.0f}</strong> ·
+                    Failed concepts <strong style="color:{TEXT};">{means['failed_concepts']:.1f}</strong>
+                </span><br>
+                <span style="font-size:13px;">{INSIGHT_MAP.get(seg, '')}</span>
+            </div>
+            """, unsafe_allow_html=True)
+
+    # ── Q10 Age Bands ─────────────────────────────────────────────────────────
     section("Q10 — AGE BANDS VS OUTCOMES")
     sf = load("student_profiles")
     sf = apply_group_filter(sf, gids)
     if not sf.empty and "age" in sf.columns:
-        sf["age_band"] = pd.cut(sf["age"], bins=[0, 20, 25, 30, 40, 100],
-                                 labels=["≤20", "21–25", "26–30", "31–40", "41+"])
-        age_stats = sf.groupby("age_band", observed=False).agg(
-            avg_grade=("avg_grade", "mean"),
+        sf["age_band"] = pd.cut(sf["age"], bins=[0, 20, 25, 30, 40],
+                                 labels=["≤20", "21–25", "26–30", "31–40"])
+        age_stats = sf.groupby("age_band", observed=True).agg(
+            avg_grade=("avg_grade",     "mean"),
             att_pct=("attendance_rate", lambda x: x.mean() * 100),
-            logins=("login_count", "mean"),
-            n=("student_id", "count")
-        ).reset_index()
+            logins=("login_count",      "mean"),
+            n=("student_id",            "count")
+        ).reset_index().dropna(subset=["avg_grade"])
+
         fig_age = go.Figure()
-        fig_age.add_trace(go.Bar(name="Avg Grade", x=age_stats["age_band"].astype(str),
+        fig_age.add_trace(go.Bar(
+            name="Avg Grade",    x=age_stats["age_band"].astype(str),
             y=age_stats["avg_grade"].round(1), marker_color=BLUE,
-            text=age_stats["avg_grade"].round(1), textposition="outside"))
-        fig_age.add_trace(go.Bar(name="Attendance %", x=age_stats["age_band"].astype(str),
+            text=age_stats["avg_grade"].round(1),
+            textposition="inside", insidetextanchor="middle",
+        ))
+        fig_age.add_trace(go.Bar(
+            name="Attendance %", x=age_stats["age_band"].astype(str),
             y=age_stats["att_pct"].round(1), marker_color=GREEN,
-            text=age_stats["att_pct"].round(1), textposition="outside"))
-        apply_theme(fig_age, "", "Age Band", "", 360)
+            text=age_stats["att_pct"].round(1),
+            textposition="inside", insidetextanchor="middle",
+        ))
+        apply_theme(fig_age, "Avg Grade and Attendance % by Age Band", "Age Band", "", 360)
         fig_age.update_layout(barmode="group")
         st.plotly_chart(fig_age, use_container_width=True)
-        insight("21–25 band leads in both grade and engagement — traditional full-time learners. "
-                "31–40 show lower attendance but comparable grades, suggesting self-directed efficiency.")
 
-        bands = ["≤20", "21–25", "26–30", "31–40", "41+"]
+        best_band  = age_stats.loc[age_stats["avg_grade"].idxmax(), "age_band"]
+        best_grade = age_stats["avg_grade"].max()
+        low_att    = age_stats.loc[age_stats["att_pct"].idxmin(), "age_band"]
+        insight(
+            f"The <strong>{best_band}</strong> age group has the highest average grade "
+            f"(<strong>{best_grade:.1f} pts</strong>) — likely full-time learners with fewer competing priorities. "
+            f"The <strong>{low_att}</strong> band has the lowest attendance, "
+            "consistent with working adults managing study alongside jobs and family. "
+            "Despite lower attendance, their grades remain comparable — indicating <strong>self-directed efficiency</strong>."
+        )
+
+        BANDS = ["≤20", "21–25", "26–30", "31–40"]
         fig_box = make_subplots(rows=1, cols=3,
             subplot_titles=["Grade Distribution", "Attendance Rate (%)", "Login Count"])
         for col_idx, (ycol, color, scale) in enumerate([
             ("avg_grade", BLUE, 1), ("attendance_rate", GREEN, 100), ("login_count", PURPLE, 1)
         ], 1):
-            for band in bands:
+            for band in BANDS:
                 subset = sf[sf["age_band"] == band][ycol].dropna() * scale
+                if len(subset) == 0:
+                    continue
                 fig_box.add_trace(go.Box(
                     y=subset, name=band, marker_color=color,
                     boxmean=True, showlegend=(col_idx == 1), legendgroup=band,
                 ), row=1, col=col_idx)
         fig_box.update_layout(
-            title=dict(text="Outcomes by Age Band  (Box = spread, dot = mean)",
-                       font=dict(size=14, color=TEXT, family="Inter"), x=0, xanchor="left"),
+            title=dict(text="Outcomes by Age Band  —  Box = spread  ·  Dot = mean",
+                       font=dict(size=13, color=TEXT, family="Inter"), x=0, xanchor="left"),
             paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor=BG,
             font=dict(color=TEXT, family="Inter", size=11),
-            margin=dict(t=80, b=40), boxmode="group", height=400,
+            margin=dict(t=60, b=40), boxmode="group", height=400,
             legend=dict(bgcolor="rgba(0,0,0,0)", bordercolor=BORDER, font=dict(color=TEXT)),
         )
         fig_box.update_xaxes(gridcolor=GRID, linecolor=BORDER, tickfont=dict(color=MUTED))
@@ -890,55 +1167,64 @@ def page_segments():
 
 def page_groups():
     section("Q12 — STATED VS ACTUAL GROUP SIZES")
-    groups = load("group_summaries")
-    if not groups.empty and "stated_num_students" not in groups.columns:
-        insight("Run the notebook to store stated_num_students in group_summaries, or check groups collection.")
+    groups     = load("group_summaries")
+    groups_raw = load("groups")
+    if not groups.empty and not groups_raw.empty and "stated_num_students" in groups_raw.columns:
+        q12 = groups_raw[["group_id", "group_name", "stated_num_students"]].merge(
+            groups[["group_id", "num_students"]], on="group_id", how="left"
+        )
+        q12["discrepancy"] = q12["num_students"] - q12["stated_num_students"]
+
+        fig = make_subplots(rows=2, cols=1,
+            subplot_titles=("Stated vs Actual student count per group",
+                            "Discrepancy  (positive = more than stated, negative = fewer)"),
+            row_heights=[0.6, 0.4], shared_xaxes=True)
+        fig.add_trace(go.Bar(x=q12["group_id"], y=q12["stated_num_students"],
+            name="Stated", marker_color=f"rgba(75,123,255,0.4)"), row=1, col=1)
+        fig.add_trace(go.Bar(x=q12["group_id"], y=q12["num_students"],
+            name="Actual", marker_color=BLUE,
+            text=q12["num_students"], textposition="inside", insidetextanchor="middle"), row=1, col=1)
+        fig.add_trace(go.Bar(
+            x=q12["group_id"], y=q12["discrepancy"],
+            name="Discrepancy",
+            marker_color=[RED if abs(d) > 2 else GREEN for d in q12["discrepancy"]],
+            text=q12["discrepancy"].astype(str),
+            textposition="inside", insidetextanchor="middle",
+        ), row=2, col=1)
+        fig.add_hline(y=0, line_color=MUTED, row=2, col=1)
+        apply_theme(fig, "", "", "", 480)
+        fig.update_layout(barmode="group")
+        st.plotly_chart(fig, use_container_width=True)
+        flagged = q12[q12["discrepancy"].abs() > 2]
+        insight(
+            f"<strong>{len(flagged)} group(s)</strong> have a discrepancy larger than 2 students. "
+            "This indicates either unrecorded dropouts, manual data entry errors, or students who enrolled but never attended. "
+            "Audit these groups before finalising term records — discrepancies above 5 should be escalated."
+        )
     else:
-        groups_raw = load("groups")
-        if not groups_raw.empty and "stated_num_students" in groups_raw.columns:
-            q12 = groups_raw[["group_id", "group_name", "stated_num_students"]].merge(
-                groups[["group_id", "num_students"]], on="group_id", how="left"
-            )
-            q12["discrepancy"] = q12["num_students"] - q12["stated_num_students"]
+        insight("Run the notebook to store group data in MongoDB, then refresh.")
 
-            fig = make_subplots(rows=2, cols=1,
-                subplot_titles=("Stated vs Actual", "Discrepancy"),
-                row_heights=[0.6, 0.4], shared_xaxes=True)
-            fig.add_trace(go.Bar(x=q12["group_id"], y=q12["stated_num_students"],
-                name="Stated", marker_color=f"rgba(75,123,255,0.45)"), row=1, col=1)
-            fig.add_trace(go.Bar(x=q12["group_id"], y=q12["num_students"],
-                name="Actual", marker_color=BLUE), row=1, col=1)
-            disc_colors = [RED if abs(d) > 2 else GREEN for d in q12["discrepancy"]]
-            fig.add_trace(go.Bar(x=q12["group_id"], y=q12["discrepancy"],
-                name="Diff", marker_color=disc_colors,
-                text=q12["discrepancy"], textposition="outside"), row=2, col=1)
-            fig.add_hline(y=0, line_color=MUTED, row=2, col=1)
-            apply_theme(fig, "", "", "", 480)
-            fig.update_layout(barmode="group")
-            st.plotly_chart(fig, use_container_width=True)
-            insight("Groups with |discrepancy| > 2 indicate unrecorded dropouts or data entry errors — audit these before term end.")
-
-    section("Q13 — NON-VIABLE GROUP IDENTIFICATION")
+    section("Q13 — NON-VIABLE GROUP IDENTIFICATION & MERGE RECOMMENDATION")
     if not groups.empty:
         smallest = groups.nsmallest(1, "num_students").iloc[0]
         st.markdown(f"""
-        <div class="insight-box">
-            <strong style="color:{RED};">Non-viable group: {smallest['group_id']}</strong>
-            with only <strong>{int(smallest['num_students'])}</strong> enrolled student(s).<br><br>
-            No peer interaction, disproportionate instructor load, and statistically unreliable metrics.
-            Closest match by concept profile should absorb this group's student(s).
-            <strong>Recommendation: merge into the nearest group on the same course.</strong>
+        <div class="insight-box" style="border-color:{RED}44;">
+            <span style="color:{RED};font-weight:700;">Non-viable group: {smallest['group_id']}</span>
+            — only <strong>{int(smallest['num_students'])}</strong> enrolled student(s).<br>
+            No peer interaction, disproportionate instructor overhead, and statistically unreliable metrics.
+            Closest match by concept profile should absorb this group.
+            <strong>Recommendation: merge into the nearest group on the same course track.</strong>
         </div>
         """, unsafe_allow_html=True)
 
-        concepts = load("concepts")
+        concepts_raw = load("concepts")
         students_raw = load("students")
-        if not concepts.empty and not students_raw.empty:
-            target_gid = smallest["group_id"]
-            target_name = smallest["group_name"]
+        if not concepts_raw.empty and not students_raw.empty:
+            target_gid  = smallest["group_id"]
+            target_name = smallest.get("group_name", target_gid)
 
             concept_pivot = (
-                concepts.groupby(["student_id", "concept_name"])["score_pct"]
+                concepts_raw.groupby(["student_id", "concept_name"])["score_pct"]
                 .mean().unstack(fill_value=0)
             )
             stu_group_map = students_raw.set_index("student_id")["group_id"]
@@ -948,21 +1234,21 @@ def page_groups():
                 rows = concept_pivot[concept_pivot["group_id"] == gid].drop(columns="group_id")
                 return rows.mean() if len(rows) > 0 else None
 
-            target_vec = group_profile(target_gid)
+            target_vec   = group_profile(target_gid)
             other_groups = groups[groups["group_id"] != target_gid]
 
             sims = {}
             for _, row in other_groups.iterrows():
                 v = group_profile(row["group_id"])
                 if v is not None and target_vec is not None:
-                    s = cosine_sim(target_vec.fillna(0).values, v.fillna(0).values)
-                    sims[row["group_name"]] = round(float(s), 4)
+                    sims[row.get("group_name", row["group_id"])] = round(
+                        cosine_sim(target_vec.fillna(0).values, v.fillna(0).values), 4
+                    )
 
             sim_df = pd.Series(sims).sort_values(ascending=False).reset_index()
             sim_df.columns = ["group_name", "similarity"]
-
             top4 = sim_df[sim_df["similarity"] > 0].head(4)
-            if len(top4) == 0:
+            if top4.empty:
                 top4 = sim_df.head(4)
 
             c1, c2 = st.columns([1, 1.4])
@@ -975,16 +1261,17 @@ def page_groups():
                     text=top4.sort_values("similarity")["similarity"].round(3),
                     labels={"similarity": "Cosine Similarity", "group_name": "Group"},
                 )
-                fig.update_traces(textposition="outside")
+                fig.update_traces(textposition="inside", insidetextanchor="end")
                 fig.update_layout(xaxis_range=[0, 1.05], coloraxis_showscale=False)
-                apply_theme(fig, f"Top Matches for {target_name}",
-                            "Cosine Similarity", "", 380)
+                apply_theme(fig, f"Concept similarity — top matches for  {target_name}",
+                            "Cosine Similarity", "", 360)
                 st.plotly_chart(fig, use_container_width=True)
 
             with c2:
-                all_gids = groups["group_id"].tolist()
-                all_gnames = groups["group_name"].tolist()
-                n = len(all_gids)
+                all_gids   = groups["group_id"].tolist()
+                all_gnames = [groups.loc[groups["group_id"] == g, "group_name"].values[0]
+                              if "group_name" in groups.columns else g for g in all_gids]
+                n   = len(all_gids)
                 mat = np.zeros((n, n))
                 for i, gi in enumerate(all_gids):
                     vi = group_profile(gi)
@@ -994,76 +1281,28 @@ def page_groups():
                             mat[i, j] = round(cosine_sim(vi.fillna(0).values, vj.fillna(0).values), 3)
 
                 fig_hm = go.Figure(go.Heatmap(
-                    z=mat,
-                    x=all_gnames, y=all_gnames,
+                    z=mat, x=all_gnames, y=all_gnames,
                     colorscale=[[0, BG], [0.5, BLUE], [1, GREEN]],
                     zmin=0, zmax=1,
-                    text=np.round(mat, 2),
-                    texttemplate="%{text}",
+                    text=np.round(mat, 2), texttemplate="%{text}",
                     textfont=dict(size=9),
                     colorbar=dict(title="Similarity", tickfont=dict(color=TEXT)),
                 ))
-                apply_theme(fig_hm, "Group-to-Group Concept Similarity", "", "", 380)
-                fig_hm.update_layout(
-                    margin=dict(t=50, b=80, l=80, r=20),
+                apply_theme(fig_hm, "Full group-to-group concept similarity matrix", "", "", 360)
+                fig_hm.update_layout(margin=dict(t=50, b=80, l=80, r=20),
                     xaxis=dict(tickangle=-45, gridcolor=GRID),
-                    yaxis=dict(gridcolor=GRID),
-                )
+                    yaxis=dict(gridcolor=GRID))
                 st.plotly_chart(fig_hm, use_container_width=True)
 
-            if len(sim_df):
+            if not sim_df.empty:
                 closest = sim_df.iloc[0]
-                insight(f"Recommended merge target: <strong>{closest['group_name']}</strong> "
-                        f"(similarity = {closest['similarity']:.4f})")
-
-
-# ── Sidebar nav ───────────────────────────────────────────────────────────────
-def sidebar():
-    with st.sidebar:
-        logo_path = Path(__file__).parent / "logo.png"
-        if logo_path.exists():
-            with open(logo_path, "rb") as f:
-                b64 = base64.b64encode(f.read()).decode()
-            st.markdown(
-                f'<div style="text-align:center;padding:16px 0 24px;">'
-                f'<img src="data:image/png;base64,{b64}" style="height:40px;"></div>',
-                unsafe_allow_html=True
-            )
-        st.markdown(f'<div style="font-size:10px;color:{MUTED};letter-spacing:1.5px;'
-                    f'text-transform:uppercase;padding:0 0 8px 4px;">Navigation</div>',
-                    unsafe_allow_html=True)
-
-        pages = {
-            "📊  Overview":         "overview",
-            "🎓  Performance":      "performance",
-            "⚡  Engagement":       "engagement",
-            "🧠  Concepts":         "concepts",
-            "🚨  At-Risk":          "risk",
-            "🔵  Segments":         "segments",
-            "👥  Groups":           "groups",
-        }
-        if "page" not in st.session_state:
-            st.session_state["page"] = "overview"
-
-        for label, key in pages.items():
-            active = st.session_state["page"] == key
-            btn_style = (f"background:rgba(75,123,255,0.15);border:1px solid {BLUE};"
-                         if active else "background:transparent;border:1px solid transparent;")
-            if st.button(label, key=f"nav_{key}",
-                         use_container_width=True):
-                st.session_state["page"] = key
-                st.rerun()
-
-        st.markdown("<br>", unsafe_allow_html=True)
-        user = st.session_state.get("user", {})
-        st.markdown(f"""
-        <div style="border-top:1px solid {BORDER};padding-top:16px;font-size:11px;color:{MUTED};">
-            <span style="color:{TEXT};font-weight:600;">{user.get('username','—')}</span>
-            <span style="color:{BLUE};"> · {user.get('role','')}</span>
-        </div>
-        """, unsafe_allow_html=True)
-
-    return st.session_state.get("page", "overview")
+                insight(
+                    f"Best merge target: <strong>{closest['group_name']}</strong> "
+                    f"with a concept similarity of <strong>{closest['similarity']:.4f}</strong>. "
+                    "High similarity means students in both groups have covered the same concepts at comparable levels — "
+                    "the merged group won't have knowledge gaps between cohorts. "
+                    "Verify they share the same course track and instructor availability before confirming."
+                )
 
 
 # ── Main ─────────────────────────────────────────────────────────────────────
