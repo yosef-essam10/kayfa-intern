@@ -1049,11 +1049,19 @@ def page_groups():
         fig.add_trace(go.Bar(x=q12["group_id"], y=q12["num_students"],
             name="Actual", marker_color=BLUE,
             text=q12["num_students"], textposition="inside", insidetextanchor="middle"), row=1, col=1)
+        flagged_mask = q12["discrepancy"].abs() > 2
         fig.add_trace(go.Bar(
-            x=q12["group_id"], y=q12["discrepancy"],
-            name="Discrepancy",
-            marker_color=[RED if abs(d) > 2 else GREEN for d in q12["discrepancy"]],
-            text=q12["discrepancy"].astype(str),
+            x=q12.loc[~flagged_mask, "group_id"], y=q12.loc[~flagged_mask, "discrepancy"],
+            name="Within tolerance (≤2)",
+            marker_color=GREEN,
+            text=q12.loc[~flagged_mask, "discrepancy"].astype(str),
+            textposition="inside", insidetextanchor="middle",
+        ), row=2, col=1)
+        fig.add_trace(go.Bar(
+            x=q12.loc[flagged_mask, "group_id"], y=q12.loc[flagged_mask, "discrepancy"],
+            name="Flagged (>2 students off)",
+            marker_color=RED,
+            text=q12.loc[flagged_mask, "discrepancy"].astype(str),
             textposition="inside", insidetextanchor="middle",
         ), row=2, col=1)
         fig.add_hline(y=0, line_color=MUTED, row=2, col=1)
