@@ -263,42 +263,6 @@ def cosine_sim(a, b):
     na, nb = np.linalg.norm(a), np.linalg.norm(b)
     return 0.0 if (na == 0 or nb == 0) else float(np.dot(a, b) / (na * nb))
 
-def kmeans_fit(X, k, n_init=10, max_iter=100, seed=42):
-    rng = np.random.default_rng(seed)
-    best_inertia, best_labels, best_centers = None, None, None
-    for _ in range(n_init):
-        idx     = rng.choice(X.shape[0], size=k, replace=False)
-        centers = X[idx].copy()
-        for __ in range(max_iter):
-            dists  = ((X[:, None, :] - centers[None, :, :]) ** 2).sum(axis=2)
-            labels = dists.argmin(axis=1)
-            new_c  = np.array([
-                X[labels == c].mean(axis=0) if np.any(labels == c) else centers[c]
-                for c in range(k)
-            ])
-            if np.allclose(new_c, centers): centers = new_c; break
-            centers = new_c
-        dists   = ((X[:, None, :] - centers[None, :, :]) ** 2).sum(axis=2)
-        labels  = dists.argmin(axis=1)
-        inertia = dists[np.arange(X.shape[0]), labels].sum()
-        if best_inertia is None or inertia < best_inertia:
-            best_inertia, best_labels, best_centers = inertia, labels, centers
-    return best_inertia, best_labels, best_centers
-
-def silhouette(X, labels):
-    k = len(np.unique(labels))
-    if k < 2: return 0.0
-    scores = []
-    for i in range(len(X)):
-        own  = labels[i]
-        a    = np.mean([np.linalg.norm(X[i] - X[j]) for j in range(len(X)) if labels[j] == own and j != i]) if np.sum(labels == own) > 1 else 0
-        b    = min(
-            np.mean([np.linalg.norm(X[i] - X[j]) for j in range(len(X)) if labels[j] == c])
-            for c in np.unique(labels) if c != own
-        )
-        scores.append((b - a) / max(a, b) if max(a, b) > 0 else 0)
-    return float(np.mean(scores))
-
 # ── Header ────────────────────────────────────────────────────────────────────
 def render_header():
     logo_path = Path(__file__).parent / "logo.png"
@@ -870,226 +834,80 @@ def page_risk():
 def page_segments():
     gids = st.session_state.get("selected_gids", [])
 
-    section("Q11 — STUDENT SEGMENTATION (KMEANS CLUSTERING)")
-    clusters = load("cluster_assignments")
-    clusters = apply_group_filter(clusters, gids)
-    sf11     = load("student_profiles")
-    sf11     = apply_group_filter(sf11, gids)
+    section("Q11 — STUDENT SEGMENTATION")
 
-    FEATS       = ["avg_grade", "attendance_rate", "login_count", "total_watch_time", "failed_concepts"]
-    FEAT_LABELS = ["Avg Grade",  "Attendance %",   "Login Count", "Watch Time",        "Failed Concepts"]
+    # The KMeans clustering + persona mapping is already computed in the notebook
+    # (Q11) and stored in MongoDB as `cluster_assignments`. The dashboard reads
+    # that precomputed result directly instead of re-running clustering live —
+    # this is what was crashing the page before (a homemade KMeans/silhouette
+    # implementation that broke whenever a sidebar filter left fewer students
+    # than the number of clusters being tried, which also meant every section
+    # AFTER segments — including the Q10 Age Bands block below — never rendered).
+    seg_df = load("cluster_assignments")
+    seg_df = apply_group_filter(seg_df, gids)
 
-    if not sf11.empty:
-        feats_avail = [f for f in FEATS if f in sf11.columns]
-        X     = sf11[feats_avail].fillna(0).to_numpy(dtype=float)
-        mean  = X.mean(axis=0); std = X.std(axis=0); std[std == 0] = 1
-        X_sc  = (X - mean) / std
-
-        # ── Silhouette + Elbow ─────────────────────────────────────────────
-        inertias, sil_scores = [], []
-        K_RANGE = range(2, 8)
-        for k in K_RANGE:
-            inertia, lbl, _ = kmeans_fit(X_sc, k, n_init=5)
-            inertias.append(inertia)
-            sil_scores.append(silhouette(X_sc, lbl))
-
-        best_k = list(K_RANGE)[sil_scores.index(max(sil_scores))]
-
-        fig_sel = make_subplots(rows=1, cols=2,
-            subplot_titles=["Inertia (Elbow) — lower = tighter clusters",
-                            "Silhouette Score — higher = better separation"])
-        fig_sel.add_trace(go.Scatter(x=list(K_RANGE), y=inertias,
-            mode="lines+markers", line=dict(color=BLUE, width=2), marker=dict(size=7),
-            name="Inertia"), row=1, col=1)
-        fig_sel.add_trace(go.Scatter(x=list(K_RANGE), y=[round(s, 3) for s in sil_scores],
-            mode="lines+markers", line=dict(color=GREEN, width=2), marker=dict(size=7),
-            name="Silhouette"), row=1, col=2)
-        fig_sel.add_vline(x=best_k, line_dash="dash", line_color=YELLOW,
-            annotation_text=f"Best k = {best_k}  (sil = {max(sil_scores):.3f})",
-            annotation_font_color=YELLOW)
-        fig_sel.update_layout(
-            title=dict(text=f"Optimal number of clusters = {best_k}  (chosen by silhouette score)",
-                       font=dict(size=13, color=TEXT, family="Inter"), x=0, xanchor="left"),
-            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor=BG,
-            font=dict(color=TEXT, family="Inter", size=11),
-            margin=dict(t=60, b=40), showlegend=False, height=320,
+    if seg_df.empty:
+        insight(
+            "No segmentation data found yet in <strong>cluster_assignments</strong>. "
+            "Re-run the notebook's MongoDB storage step (Part 13) to populate it."
         )
-        fig_sel.update_xaxes(gridcolor=GRID, linecolor=BORDER, title_text="k", tickfont=dict(color=MUTED))
-        fig_sel.update_yaxes(gridcolor=GRID, linecolor=BORDER, tickfont=dict(color=MUTED))
-        st.plotly_chart(fig_sel, use_container_width=True)
+    else:
+        seg_df = seg_df.rename(columns={"cluster_label": "segment"})
 
-        # ── Final clustering with best_k ────────────────────────────────────
-        _, labels_arr, _ = kmeans_fit(X_sc, best_k, n_init=10)
-        sf11_labeled = sf11[feats_avail].fillna(0).copy()
-        sf11_labeled["cluster"]   = labels_arr
-        sf11_labeled["full_name"] = sf11["full_name"].values if "full_name" in sf11.columns else ""
-        if "attendance_rate" in sf11.columns:
-            sf11_labeled["att_pct"] = sf11["attendance_rate"].fillna(0) * 100
+        # keep a stable, meaningful order (falls back to whatever is present)
+        seg_order = [s for s in SEG_COLORS if s in seg_df["segment"].unique()]
+        if not seg_order:
+            seg_order = sorted(seg_df["segment"].dropna().unique())
 
-        c_means = sf11_labeled.groupby("cluster")[feats_avail].mean()
-        med     = sf11_labeled[feats_avail].median()
-
-        seg_map = {}
-        for ci, row in c_means.iterrows():
-            hg = row["avg_grade"]       >= med["avg_grade"]
-            ha = row["attendance_rate"] >= med["attendance_rate"]
-            he = row["login_count"]     >= med["login_count"]
-            if hg and ha and he:
-                seg_map[ci] = "High Achiever"
-            elif not hg and not ha:
-                seg_map[ci] = "At Risk"
-            elif hg and not ha:
-                seg_map[ci] = "Self-Directed"
-            elif not hg and he:
-                seg_map[ci] = "Struggling Engaged"
-            else:
-                seg_map[ci] = "Average"
-
-        sf11_labeled["segment"] = sf11_labeled["cluster"].map(seg_map)
-        seg_order = list(dict.fromkeys(sf11_labeled["segment"].dropna()))
-
-        # ── Donut: distribution ─────────────────────────────────────────────
-        seg_counts = sf11_labeled["segment"].value_counts().reset_index()
+        seg_counts = seg_df["segment"].value_counts().reindex(seg_order).reset_index()
         seg_counts.columns = ["segment", "n"]
-        seg_counts["pct"] = (seg_counts["n"] / len(sf11_labeled) * 100).round(1)
+        seg_counts["pct"] = (seg_counts["n"] / len(seg_df) * 100).round(1)
 
-        c1, c2 = st.columns([1, 1.6])
-        with c1:
-            fig_donut = go.Figure(go.Pie(
-                labels=seg_counts["segment"],
-                values=seg_counts["n"],
-                text=seg_counts["pct"].astype(str) + "%",
-                textinfo="label+text",
-                hole=0.48,
-                marker=dict(colors=[SEG_COLORS.get(s, MUTED) for s in seg_counts["segment"]]),
-                textfont=dict(size=11),
-            ))
-            fig_donut.update_layout(
-                title=dict(text="Segment Distribution", font=dict(size=13, color=TEXT, family="Inter"),
-                           x=0, xanchor="left"),
-                paper_bgcolor="rgba(0,0,0,0)",
-                font=dict(color=TEXT, family="Inter", size=11),
-                legend=dict(bgcolor="rgba(0,0,0,0)", bordercolor=BORDER, font=dict(color=TEXT)),
-                margin=dict(t=50, b=20, l=0, r=0),
-                height=360,
-            )
-            st.plotly_chart(fig_donut, use_container_width=True)
-
-        # ── Radar ────────────────────────────────────────────────────────────
-        with c2:
-            c_means_seg  = sf11_labeled.groupby("segment")[feats_avail].mean()
-            cmin, cmax   = c_means_seg.min(), c_means_seg.max()
-            crange       = (cmax - cmin).replace(0, 1)
-            c_norm_df    = (c_means_seg - cmin) / crange
-
-            fig_radar = go.Figure()
-            cats = FEAT_LABELS + [FEAT_LABELS[0]]
-            for seg, row in c_norm_df.iterrows():
-                vals = list(row.values) + [row.values[0]]
-                fig_radar.add_trace(go.Scatterpolar(
-                    r=vals, theta=cats, fill="toself", opacity=0.5,
-                    name=seg,
-                    line=dict(color=SEG_COLORS.get(seg, MUTED), width=2),
-                ))
-            fig_radar.update_layout(
-                polar=dict(
-                    bgcolor=PANEL,
-                    radialaxis=dict(visible=True, range=[0, 1], gridcolor=GRID, tickfont=dict(color=TEXT, size=9)),
-                    angularaxis=dict(gridcolor=GRID, tickfont=dict(color=TEXT, size=11)),
-                ),
-                paper_bgcolor="rgba(0,0,0,0)",
-                font=dict(color=TEXT, family="Inter"),
-                title=dict(text="Segment Profiles — Normalized 0 to 1", font=dict(size=13, color=TEXT, family="Inter"),
-                           x=0, xanchor="left"),
-                legend=dict(bgcolor="rgba(0,0,0,0)", bordercolor=BORDER, font=dict(color=TEXT)),
-                margin=dict(t=50, b=20, l=40, r=40),
-                height=360,
-            )
-            st.plotly_chart(fig_radar, use_container_width=True)
-
-        # ── Grouped bar: raw means ────────────────────────────────────────────
-        bar_df = c_means_seg.reset_index().melt(id_vars="segment", value_vars=feats_avail)
-        lmap   = dict(zip(FEATS, FEAT_LABELS))
-        bar_df["feature"] = bar_df["feature"].map(lmap)
-        fig_bar = go.Figure()
-        for seg in seg_order:
-            sub = bar_df[bar_df["segment"] == seg]
-            fig_bar.add_trace(go.Bar(
-                x=sub["feature"], y=sub["value"].round(2),
-                name=seg,
-                marker_color=SEG_COLORS.get(seg, MUTED),
-                text=sub["value"].round(1),
-                textposition="inside",
-                insidetextanchor="end",
-            ))
-        fig_bar.update_layout(
-            barmode="group",
-            title=dict(text="Raw Feature Averages per Segment — what actually defines each group",
-                       font=dict(size=13, color=TEXT, family="Inter"), x=0, xanchor="left"),
-            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor=BG,
-            font=dict(color=TEXT, family="Inter", size=11),
+        fig_donut = go.Figure(go.Pie(
+            labels=seg_counts["segment"],
+            values=seg_counts["n"],
+            text=seg_counts["pct"].astype(str) + "%",
+            textinfo="label+text",
+            hole=0.5,
+            marker=dict(colors=[SEG_COLORS.get(s, MUTED) for s in seg_counts["segment"]]),
+            textfont=dict(size=12),
+            sort=False,
+        ))
+        fig_donut.update_layout(
+            title=dict(text="Segment Distribution", font=dict(size=14, color=TEXT, family="Inter"),
+                       x=0, xanchor="left"),
+            paper_bgcolor="rgba(0,0,0,0)",
+            font=dict(color=TEXT, family="Inter", size=12),
             legend=dict(bgcolor="rgba(0,0,0,0)", bordercolor=BORDER, font=dict(color=TEXT)),
-            margin=dict(t=50, b=60, l=40, r=20),
-            xaxis=dict(gridcolor=GRID, linecolor=BORDER, tickfont=dict(color=MUTED)),
-            yaxis=dict(gridcolor=GRID, linecolor=BORDER, tickfont=dict(color=MUTED)),
-            height=380,
+            margin=dict(t=50, b=20, l=0, r=0),
+            height=440,
         )
-        st.plotly_chart(fig_bar, use_container_width=True)
+        st.plotly_chart(fig_donut, use_container_width=True)
 
-        # ── Bubble scatter ────────────────────────────────────────────────────
-        fig_scat = go.Figure()
-        lc_col = "login_count" if "login_count" in sf11_labeled.columns else feats_avail[0]
-        for seg in seg_order:
-            sub = sf11_labeled[sf11_labeled["segment"] == seg]
-            lc  = sub[lc_col].clip(upper=sub[lc_col].quantile(0.95)) if len(sub) > 1 else sub[lc_col]
-            fig_scat.add_trace(go.Scatter(
-                x=sub["att_pct"] if "att_pct" in sub.columns else sub[feats_avail[1]] * 100,
-                y=sub["avg_grade"],
-                mode="markers",
-                name=seg,
-                marker=dict(
-                    color=SEG_COLORS.get(seg, MUTED),
-                    size=lc, sizemode="area", sizeref=0.15,
-                    opacity=0.75,
-                    line=dict(width=0.5, color="rgba(255,255,255,0.2)"),
-                ),
-                text=sub["full_name"],
-                hovertemplate=(
-                    "<b>%{text}</b><br>"
-                    "Attendance: %{x:.1f}%<br>"
-                    "Grade: %{y:.1f}<br>"
-                    f"Segment: {seg}<extra></extra>"
-                ),
-            ))
-        fig_scat.update_layout(
-            title=dict(text="Grade vs Attendance  ·  Bubble size = Login Count  ·  Color = Segment",
-                       font=dict(size=13, color=TEXT, family="Inter"), x=0, xanchor="left"),
-            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor=BG,
-            font=dict(color=TEXT, family="Inter", size=11),
-            legend=dict(bgcolor="rgba(0,0,0,0)", bordercolor=BORDER, font=dict(color=TEXT)),
-            margin=dict(t=50, b=40, l=40, r=20),
-            xaxis=dict(title="Attendance %", gridcolor=GRID, linecolor=BORDER, tickfont=dict(color=MUTED)),
-            yaxis=dict(title="Avg Grade",    gridcolor=GRID, linecolor=BORDER, tickfont=dict(color=MUTED)),
-            height=420,
-        )
-        st.plotly_chart(fig_scat, use_container_width=True)
-
-        # ── Per-segment insights ──────────────────────────────────────────────
+        # ── Per-segment insights ────────────────────────────────────────────
         section("SEGMENT INSIGHTS")
+        FEATS       = ["avg_grade", "attendance_rate", "login_count", "failed_concepts"]
+        feats_avail = [f for f in FEATS if f in seg_df.columns]
         for seg in seg_order:
-            sub   = sf11_labeled[sf11_labeled["segment"] == seg]
+            sub = seg_df[seg_df["segment"] == seg]
+            if sub.empty:
+                continue
             means = sub[feats_avail].mean()
             color = SEG_COLORS.get(seg, MUTED)
-            pct   = len(sub) / len(sf11_labeled) * 100
+            pct   = len(sub) / len(seg_df) * 100
+            grade_v = means.get("avg_grade", float("nan"))
+            att_v   = means.get("attendance_rate", float("nan")) * 100
+            login_v = means.get("login_count", float("nan"))
+            fail_v  = means.get("failed_concepts", float("nan"))
             st.markdown(f"""
             <div class="insight-box" style="border-color:{color}33;margin-bottom:10px;">
                 <span style="color:{color};font-weight:700;font-size:14px;">● {seg}</span>
                 <span style="color:{MUTED};font-size:12px;margin-left:10px;">{len(sub)} students · {pct:.1f}%</span><br>
                 <span style="font-size:12px;color:{MUTED};">
-                    Grade <strong style="color:{TEXT};">{means['avg_grade']:.1f}</strong> ·
-                    Attendance <strong style="color:{TEXT};">{means['attendance_rate']*100:.0f}%</strong> ·
-                    Logins <strong style="color:{TEXT};">{means['login_count']:.0f}</strong> ·
-                    Failed concepts <strong style="color:{TEXT};">{means['failed_concepts']:.1f}</strong>
+                    Grade <strong style="color:{TEXT};">{grade_v:.1f}</strong> ·
+                    Attendance <strong style="color:{TEXT};">{att_v:.0f}%</strong> ·
+                    Logins <strong style="color:{TEXT};">{login_v:.0f}</strong> ·
+                    Failed concepts <strong style="color:{TEXT};">{fail_v:.1f}</strong>
                 </span><br>
                 <span style="font-size:13px;">{INSIGHT_MAP.get(seg, '')}</span>
             </div>
