@@ -522,7 +522,7 @@ def page_engagement():
             mode="lines", line=dict(color=YELLOW, width=2.5),
             name="Trend line", showlegend=False
         ))
-        apply_theme(fig, f"Each dot = one student  ·  Trend line shows overall direction  ·  Pearson r = {corr:.3f}", "Attendance Rate", "Avg Grade", 420)
+        apply_theme(fig, "Each dot = one student  ·  Trend line shows overall direction", "Attendance Rate", "Avg Grade", 420)
         fig.update_xaxes(tickformat=".0%")
         fig.update_traces(marker=dict(size=5), selector=dict(mode="markers"))
         st.plotly_chart(fig, use_container_width=True)
@@ -581,11 +581,7 @@ def page_engagement():
                     mode="lines", line=dict(color=YELLOW, width=2),
                     name="Trend", showlegend=False
                 ))
-                direction = "positive" if r > 0 else "negative"
-                strength  = "strong" if abs(r) > 0.5 else ("moderate" if abs(r) > 0.3 else "weak")
-                apply_theme(fig_e,
-                    f"{xlab} vs Grade  ·  {strength.capitalize()} {direction} correlation  (r = {r:.3f})",
-                    xlab, "Avg Grade", 340)
+                apply_theme(fig_e, f"{xlab} vs Grade", xlab, "Avg Grade", 340)
                 st.plotly_chart(fig_e, use_container_width=True)
 
         r_login = sf["login_count"].corr(sf["avg_grade"])
@@ -1200,7 +1196,7 @@ def page_groups():
                     top_concepts = active.sort_values("abs_diff", ascending=False).head(12).sort_values(target_name)
 
                     if not top_concepts.empty:
-                        section(f"Q13 — CONCEPT MASTERY PROFILE  (actual similarity basis, cos={closest['similarity']:.4f})")
+                        section("Q13 — CONCEPT MASTERY PROFILE  (what actually drove the match)")
                         fig_concepts = go.Figure()
                         fig_concepts.add_trace(go.Bar(
                             y=top_concepts.index, x=top_concepts[target_name],
