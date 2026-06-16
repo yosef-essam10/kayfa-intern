@@ -444,12 +444,13 @@ def page_performance():
         fig = go.Figure()
         for t in type_order:
             vals = grades[grades["type"] == t]["score"].dropna()
-            fig.add_trace(go.Violin(
-                y=vals, name=t, box_visible=True, meanline_visible=True,
-                points="outliers", opacity=0.75,
+            fig.add_trace(go.Box(
+                y=vals, name=t, boxmean=True,
+                boxpoints="outliers",
                 marker_color=colors_map.get(t, PURPLE),
                 line_color=colors_map.get(t, PURPLE),
                 fillcolor=colors_map.get(t, PURPLE),
+                opacity=0.75,
             ))
         apply_theme(fig, "", "Assessment Type", "Score", 420)
         fig.update_layout(showlegend=False)
