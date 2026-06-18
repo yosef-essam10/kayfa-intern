@@ -506,7 +506,6 @@ def page_engagement():
     sf = apply_group_filter(sf, gids)
     if not sf.empty:
         q4   = sf[["attendance_rate", "avg_grade"]].dropna()
-        corr = q4["attendance_rate"].corr(q4["avg_grade"])
 
         fig = px.scatter(
             sf, x="attendance_rate", y="avg_grade",
@@ -550,7 +549,7 @@ def page_engagement():
         low_att  = sf[sf["attendance_rate"] < 0.5]["avg_grade"].mean()
         high_att = sf[sf["attendance_rate"] >= 0.8]["avg_grade"].mean()
         insight(
-            f"Pearson r = <strong>{corr:.3f}</strong> — a moderate positive relationship between attendance and grades. "
+            "There's a moderate positive relationship between attendance and grades. "
             f"Students attending <strong>80%+</strong> average <strong>{high_att:.1f} pts</strong>, "
             f"versus <strong>{low_att:.1f} pts</strong> for those below 50% — "
             f"a <strong>{high_att - low_att:.1f}-point advantage</strong>. "
@@ -584,11 +583,9 @@ def page_engagement():
                 apply_theme(fig_e, f"{xlab} vs Grade", xlab, "Avg Grade", 340)
                 st.plotly_chart(fig_e, use_container_width=True)
 
-        r_login = sf["login_count"].corr(sf["avg_grade"])
-        r_watch = sf["total_watch_time"].corr(sf["avg_grade"]) if "total_watch_time" in sf.columns else 0
         insight(
-            f"Login count (r = <strong>{r_login:.3f}</strong>) and watch time (r = <strong>{r_watch:.3f}</strong>) "
-            "both show a positive link with grades — but the relationship is weaker than attendance or concept mastery. "
+            "Both login count and watch time show a positive link with grades — "
+            "but the relationship is weaker than attendance or concept mastery. "
             "<strong>Passive consumption (watching videos) doesn't replace active practice.</strong> "
             "Students who log in frequently but still fail concepts are the 'Struggling Engaged' segment — "
             "effort without the right strategy."
