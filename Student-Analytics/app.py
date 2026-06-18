@@ -476,7 +476,6 @@ def page_performance():
         fig3 = go.Figure(go.Bar(
             x=course_avg["course_name"],
             y=course_avg["avg"].round(1),
-            error_y=dict(type="data", array=course_avg["std"].round(1), visible=True, color=MUTED),
             marker_color=bar_colors,
             text=course_avg["avg"].round(1),
             textposition="inside",
@@ -999,32 +998,6 @@ def page_segments():
             "consistent with working adults managing study alongside jobs and family. "
             "Despite lower attendance, their grades remain comparable — indicating <strong>self-directed efficiency</strong>."
         )
-
-        BANDS = ["≤20", "21–25", "26–30", "31–40"]
-        fig_box = make_subplots(rows=1, cols=3,
-            subplot_titles=["Grade Distribution", "Attendance Rate (%)", "Login Count"])
-        for col_idx, (ycol, color, scale) in enumerate([
-            ("avg_grade", BLUE, 1), ("attendance_rate", GREEN, 100), ("login_count", PURPLE, 1)
-        ], 1):
-            for band in BANDS:
-                subset = sf[sf["age_band"] == band][ycol].dropna() * scale
-                if len(subset) == 0:
-                    continue
-                fig_box.add_trace(go.Box(
-                    y=subset, name=band, marker_color=color,
-                    boxmean=True, showlegend=(col_idx == 1), legendgroup=band,
-                ), row=1, col=col_idx)
-        fig_box.update_layout(
-            title=dict(text="Outcomes by Age Band  —  Box = spread  ·  Dot = mean",
-                       font=dict(size=13, color=TEXT, family="Inter"), x=0, xanchor="left"),
-            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor=BG,
-            font=dict(color=TEXT, family="Inter", size=11),
-            margin=dict(t=60, b=40), boxmode="group", height=400,
-            legend=dict(bgcolor="rgba(0,0,0,0)", bordercolor=BORDER, font=dict(color=TEXT)),
-        )
-        fig_box.update_xaxes(gridcolor=GRID, linecolor=BORDER, tickfont=dict(color=MUTED))
-        fig_box.update_yaxes(gridcolor=GRID, linecolor=BORDER, tickfont=dict(color=MUTED))
-        st.plotly_chart(fig_box, use_container_width=True)
 
 
 def page_groups():
